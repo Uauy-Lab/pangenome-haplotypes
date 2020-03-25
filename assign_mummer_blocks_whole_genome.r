@@ -1,5 +1,5 @@
 ## Script written by Jemima Brinton 2019
-## Aim - define haplotype blocks across whole wheat genome based on pairwise nucmer alignments between genome assemblies/releasePGSBv2
+## Aim - define haplotype blocks across whole wheat genome based on pairwise nucmer alignments between genome assemblies
 
 ###FUNCTIONS
 library(dplyr)
