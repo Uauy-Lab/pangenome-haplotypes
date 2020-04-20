@@ -1,0 +1,160 @@
+# Find regions that are not in IBD regions
+
+From all the IBD regions. For this, I first exported the regions that are identical by descent from the MySQL database. From ther I have to 
+
+1. Split the table per assembly
+2. Fix the chromosome order and length based on each assembly. 
+3. use ```genomicRanges``` ```diff``` to find the regions that are not overlapping. 
+
+```{r, results='hide',message=FALSE}
+suppressWarnings({
+library(ggplot2)
+library(sqldf)
+library(reshape2)
+library(ggbio)
+library(GenomicRanges)
+library(GenomicFeatures)
+library(rtracklayer)
+library(gridExtra)
+library(grid)
+    #require("bio.tilling")
+})
+```
+
+Loading the auxiliary functions
+
+```{r}
+fixRangesOrder<-function(gr,lens, ordr = c("chr1A","chr1B", "chr1D","chr2A","chr2B", "chr2D","chr3A","chr3B", "chr3D","chr4A","chr4B", "chr4D","chr5A","chr5B", "chr5D","chr6A","chr6B", "chr6D","chr7A","chr7B", "chr7D","chrUn")){
+    as_df <-data.frame(gr)
+    as_df$seqnames <- factor(as.character(as_df$seqnames),levels = ordr )
+    vect = lens$length
+    names(vect) <-lens$seqname
+    gr2 <- makeGRangesFromDataFrame(as_df,keep.extra.columns = T, seqinfo=vect)
+    trim(gr2)
+}
+
+```
+
+
+Now we need to read the files 
+
+```{r,message=FALSE,  results='hide', echo=TRUE}
+input_folder <- "/Users/ramirezr/Dropbox/JIC/SM1/jemima/block_in_pseudomolecules"
+window_sizes <- c("5000kbp")
+
+readAllBlocks<-function(input_folder, window_size="5000kbp", prefix="Blocks_in_pseudomolecules_Tae_", suffix=".tsv.gz", varieties=c("arinalrfor", "jagger" )){
+    path<-paste0(input_folder, "/", prefix, window_size, suffix)
+    df <- read.csv(file =gzfile(path), header=T, sep = "\t" )
+    all_asm <- unique(df$assembly)
+    missing_cultivars <- setdiff(all_asm,varieties ) 
+
+    blocks_to_remove <- df[df$assembly %in% missing_cultivars , "block_no"]
+    
+    df <- df[!(df$block_no %in% blocks_to_remove ),]
+
+    all_grs <- list()
+    for(asm in unique(df$assembly)){
+        tmp_df <- df[df$assembly == asm, ]
+        chromosomes <- tmp_df[, c("chromosome", "chr_length")]
+        colnames(chromosomes) <- c("seqnames", "length")
+        chromosomes <- unique(chromosomes)
+        tmp_df$chr_length <- NULL
+        gr <- makeGRangesFromDataFrame(tmp_df,keep.extra.columns = T)
+        gr <- fixRangesOrder(gr, chromosomes, ordr <- sort(chromosomes$seqnames))
+        all_grs[asm] <- gr
+    }
+    all_grs
+}
+suppressWarnings(blocks <- readAllBlocks(input_folder)
+)
+```
+
+
+
+```{r}
+autoplot(blocks$arinalrfor,layout = "karyogram")
+```
+
+Lets plot the block density to start: 
+
+```{r}
+
+calculate_block_coverage<-function(gr2){
+    v2 <- gr2    
+    cov_v2 <- coverage(x = v2)   
+    gr_bins <-GRanges(cov_v2)
+    gr_bins$coverage <- gr_bins$score
+    gr_bins$score <- NULL
+    gr_bins$assembly <-  gr2$assembly[1]
+    gr_bins$reference <- gr2$reference[1]
+    return(gr_bins)
+}
+
+
+plotBlockDensity<-function(gr,tilewidth=500000, base=2){
+   
+    gr_bins <- calculate_block_coverage(gr)
+
+    gr_bins$log_cov <- ceiling(log(gr_bins$coverage+1,base=base))
+    gr_bins$log_cov <- ifelse(gr_bins$log_cov < 1 ,0, gr_bins$log_cov )
+    cov_ranges<-list()
+    for(r in sort(unique(gr_bins$log_cov))){
+        tmp_gr = gr_bins[gr_bins$log_cov == r]
+        cov_ranges[as.character(r)] = paste0(round(min(tmp_gr$coverage),2),"-", round(max(tmp_gr$coverage),2))
+    }
+    gr_bins$cov_legend <- factor(as.character(cov_ranges[as.character(gr_bins$log_cov)]), levels=cov_ranges)
+    asm <- unique(gr$assembly)
+    title <- paste0("Haplotype blocks for: " , asm )
+    autoplot(gr_bins,  layout = "karyogram", aes(fill=cov_legend)) + ggtitle(title) + scale_fill_brewer(type="seq", palette = "Oranges") 
+}
+
+
+```
+
+Now we are actually going to run the code for each dataset: 
+
+
+Define the different sets to read
+```{r}
+datasets <- list() 
+datasets[["only_pseudomolecules_cultivar"]] <- c("arinalrfor","jagger","julius","lancer","landmark","mace","stanley","sy_mattis")
+datasets[["only_pseudomolecules"]] <- c("arinalrfor","chinese","jagger","julius","lancer","landmark","mace","norin61","stanley","sy_mattis","spelta")
+datasets[["only_cultivar"] ]<- c("arinalrfor","cadenza","claire","jagger","julius","lancer","landmark","mace","paragon","robigus","stanley","sy_mattis","weebil")
+datasets[["all_assemblies"]] <- c("arinalrfor","cadenza","chinese","claire","jagger","julius","lancer","landmark","mace","norin61","paragon","robigus","spelta","stanley","sy_mattis","weebil")
+datasets
+```
+
+```{r}
+
+
+
+
+
+out_df <- NULL
+window_sizes <- c("5000kbp","2500kbp","1000kbp")
+for(dataset in names(datasets)){
+    output_folder <- paste0(input_folder, "/",dataset)
+    vars <- datasets[[dataset]]
+    print(output_folder)
+    print(vars)
+    dir.create(output_folder)
+    for(window_size in window_sizes){
+        print(window_size)
+        suppressWarnings(blocks <- readAllBlocks(input_folder,varieties=vars,window_size=window_size))
+        
+        path_pdf <- paste0(output_folder,"/blocks_coverage_",window_size,".pdf")
+        pdf(path_pdf,onefile = TRUE)
+        for(asm in blocks){
+            print(plotBlockDensity(asm))
+            tmp_df <- data.frame(calculate_block_coverage(asm))
+            if(is.null(output_folder)){
+                out_df <- tmp_df
+            }else{
+                out_df <- rbind(out_df, tmp_df)
+            }
+        }
+        dev.off()
+        write.csv(out_df, file=paste0(output_folder, "/blocks_coverage_",window_size,".csv"))
+    }
+}
+```
