@@ -138,10 +138,11 @@ for(dataset in names(datasets)){
     print(output_folder)
     print(vars)
     dir.create(output_folder)
+    
     for(window_size in window_sizes){
         print(window_size)
         suppressWarnings(blocks <- readAllBlocks(input_folder,varieties=vars,window_size=window_size))
-        
+        out_df <- NULL
         path_pdf <- paste0(output_folder,"/blocks_coverage_",window_size,".pdf")
         pdf(path_pdf,onefile = TRUE)
         for(asm in blocks){
