@@ -5,9 +5,10 @@
 #SBATCH -n 1
 #SBATCH -p jic-short,RG-Cristobal-Uauy
 #SBATCH --array=0-255
-#SBATCH -o ./run_logs/show_snps_2B.%a.%N.%j.out
-#SBATCH -e ./run_logs/show_snps_2B.%a.%N.%j.err
+#SBATCH -o ./run_logs/show_snps.%a.%N.%j.out
+#SBATCH -e ./run_logs/show_snps.%a.%N.%j.err
 
+#DEFINE CHROMOSOME
 CHR_NAME="2B"
 
 t_id=$SLURM_ARRAY_TASK_ID
@@ -35,8 +36,7 @@ echo $REF_NAME
 echo $QUERY_NAME
 echo $CHR_NAME
 
-
-ALN_DIR='/jic/scratch/groups/Cristobal-Uauy/brintonj/6A_region/mummer/whole_2B_aln/'$REF_NAME
+ALN_DIR='/jic/scratch/groups/Cristobal-Uauy/brintonj/haplotype/whole_genome_mummer/aln/'$REF_NAME/$CHR_NAME
 ALN_ID=$REF_NAME'_v_'$QUERY_NAME'.all_'$CHR_NAME'_filtered_L20Kb_rq'
 
 OUTPUT_DIR='/jic/scratch/groups/Cristobal-Uauy/brintonj/haplotype/whole_genome_mummer/surrounding_seq/'$CHR_NAME
