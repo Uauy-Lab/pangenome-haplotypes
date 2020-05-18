@@ -1,0 +1,166 @@
+---
+title: "Calculate sequence complexity"
+author: "Jemima Brinton"
+date: "23/03/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(magrittr)
+library(GenomicRanges)
+library(ggplot2)
+library(tidyr)
+library(viridis)
+library(stringr)
+library(dada2)
+```
+
+```{r}
+#read in haplotype blocks
+hap_coords <- read.table("X:/brintonj/haplotype/whole_genome_mummer_BLAST_5mbp_blocks_combined_ref_coords_block_numbers_SPELTA_ADDED.tsv",
+                         sep = "\t", 
+                         header = TRUE,
+                         stringsAsFactors = FALSE)
+
+head(hap_coords)
+
+hap_coords_mummer <- hap_coords[hap_coords$source == "mummer",]
+
+hap_coords_mummer_6A <- hap_coords_mummer[hap_coords_mummer$chrom == "chr6A",]
+sequence_dir <- "X:/brintonj/haplotype/whole_genome_mummer/surrounding_seq/6A/"
+output_dir <- "X:/brintonj/haplotype/whole_genome_mummer/surrounding_seq/"
+
+sequence_files<- list.files(sequence_dir)
+sequence_files
+
+
+all_snps <- data.frame(P1=numeric(),
+                       REF_SEQ = character(),
+                       REF = character(),
+                       QUERY = character(),
+                       hap_block = character())
+
+for (file in sequence_files){
+  
+  ref_query_temp <- str_split_fixed(file, "\\.", 2)[1]
+  ref <- str_split_fixed(ref_query_temp, "_", 3)[1]
+  query <- str_split_fixed(ref_query_temp, "_", 3)[3]
+  
+  if(ref == "sy"){
+    ref <- "sy_mattis"
+    query <- str_split_fixed(ref_query_temp, "_", 4)[4]
+  }
+  
+  if(query == "sy"){
+    query <- "sy_mattis"
+  }
+  
+  snp_flanks <- read.table(file = paste0(sequence_dir, file),
+                          sep = "\t",
+                          skip = 4,
+                          header = FALSE,
+                          stringsAsFactors = FALSE)
+
+  colnames(snp_flanks) <- c("P1", "SUB1", "SUB2", "P2", "BUFF", "DIST", "REF_SEQ", "QUERY_SEQ", "FRM", "TAGS", "REF", "QUERY")
+  snp_flanks_noN <- snp_flanks[!((snp_flanks$SUB1 == "N") | (snp_flanks$SUB2 == "N")),]
+  
+  to_keep <- snp_flanks_noN[,c("P1", "REF_SEQ", "REF", "QUERY")]
+  
+  to_keep$hap_block <- NA
+  
+  comp_haps <- hap_coords_mummer_6A[(hap_coords_mummer_6A$ref == ref) & (hap_coords_mummer_6A$query == query),]
+  if (nrow(comp_haps) > 0){
+    for (i in seq(1, nrow(comp_haps))){
+      start <- comp_haps[i, "ref_start"]
+      end <- comp_haps[i, "ref_end"]
+      to_keep[(to_keep$P1 >= start) & (to_keep$P1 <= end), "hap_block"] <- "Y"
+    }
+  }
+    
+  to_keep[is.na(to_keep$hap_block), "hap_block"] <- "N"
+    
+  to_keep$REF_CPLX <- seqComplexity(to_keep$REF_SEQ)
+
+  write.table(to_keep, 
+              file = paste0(output_dir, ref, "_v_", query, "6A_snps_ref_complexity.tsv"),
+            sep = "\t",
+            col.names = TRUE, 
+            row.names = FALSE,
+            quote = FALSE)
+}
+
+
+```
+
+Do the same thing for 2B so we can compare a different chromosome
+
+```{r}
+chrom <- "2B"
+hap_coords_mummer_chrom <- hap_coords_mummer[hap_coords_mummer$chrom == paste0("chr", chrom),]
+
+sequence_dir <- paste0("X:/brintonj/haplotype/whole_genome_mummer/surrounding_seq/", chrom, "/")
+output_dir <- paste0(sequence_dir, "complexity/")
+
+dir.create(output_dir, recursive = TRUE)
+
+sequence_files <- list.files(sequence_dir, pattern = "snps")
+
+all_snps <- data.frame(P1=numeric(),
+                       REF_SEQ = character(),
+                       REF = character(),
+                       QUERY = character(),
+                       hap_block = character())
+
+for (file in sequence_files){
+  
+  ref_query_temp <- str_split_fixed(file, "\\.", 2)[1]
+  ref <- str_split_fixed(ref_query_temp, "_", 3)[1]
+  query <- str_split_fixed(ref_query_temp, "_", 3)[3]
+  
+  if(ref == "sy"){
+    ref <- "sy_mattis"
+    query <- str_split_fixed(ref_query_temp, "_", 4)[4]
+  }
+  
+  if(query == "sy"){
+    query <- "sy_mattis"
+  }
+  
+  snp_flanks <- read.table(file = paste0(sequence_dir, file),
+                          sep = "\t",
+                          skip = 4,
+                          header = FALSE,
+                          stringsAsFactors = FALSE)
+
+  colnames(snp_flanks) <- c("P1", "SUB1", "SUB2", "P2", "BUFF", "DIST", "REF_SEQ", "QUERY_SEQ", "FRM", "TAGS", "REF", "QUERY")
+  snp_flanks_noN <- snp_flanks[!((snp_flanks$SUB1 == "N") | (snp_flanks$SUB2 == "N")),]
+  
+  to_keep <- snp_flanks_noN[,c("P1", "REF_SEQ", "REF", "QUERY")]
+  
+  to_keep$hap_block <- NA
+  
+  comp_haps <- hap_coords_mummer_chrom[(hap_coords_mummer_chrom$ref == ref) & (hap_coords_mummer_chrom$query == query),]
+  if (nrow(comp_haps) > 0){
+    for (i in seq(1, nrow(comp_haps))){
+      start <- comp_haps[i, "ref_start"]
+      end <- comp_haps[i, "ref_end"]
+      to_keep[(to_keep$P1 >= start) & (to_keep$P1 <= end), "hap_block"] <- "Y"
+    }
+  }
+    
+  to_keep[is.na(to_keep$hap_block), "hap_block"] <- "N"
+    
+  to_keep$REF_CPLX <- seqComplexity(to_keep$REF_SEQ)
+
+  write.table(to_keep, 
+              file = paste0(output_dir, ref, "_v_", query, chrom, "_snps_ref_complexity.tsv"),
+            sep = "\t",
+            col.names = TRUE, 
+            row.names = FALSE,
+            quote = FALSE)
+}
+
+```
