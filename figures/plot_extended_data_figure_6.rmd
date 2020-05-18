@@ -1,0 +1,167 @@
+---
+title: "Plots for Extended data 5 panel B"
+author: "Jemima Brinton"
+date: "13/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(ggbio)
+library(stringr)
+library(GenomicRanges)
+library(viridis)
+library(scales)
+
+```
+
+Want to produced the figures for extended data 5 which show the highly conserved regions for different bin sizes and include locations of agronimically important genes
+
+```{r}
+shared_data_dir <- "C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/unique_shared_regions/"
+out_dir <- "C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/"
+set <- "all_assemblies"
+
+set_dir <- paste0(shared_data_dir, set, "/")
+
+
+chrom_lengths_pangenome <- read.table("W:/assemblies/releasePGSBv2.0/genome/combined_fai.txt",
+                                      header = FALSE,
+                                      stringsAsFactors = FALSE)
+
+head(chrom_lengths_pangenome)
+
+chrom_lengths_refseq <- read.table("W:/WGAv1.0/161010_Chinese_Spring_v1.0_pseudomolecules.fai", 
+                                   sep = "\t", 
+                                   header = FALSE,
+                                   stringsAsFactors = FALSE)
+
+head(chrom_lengths_refseq)
+
+chrom_lengths <- rbind(chrom_lengths_pangenome[,c(1,2)], chrom_lengths_refseq[,c(1,2)])
+colnames(chrom_lengths) <- c("seqnames", "chrom_length")
+
+head(chrom_lengths)
+
+important_genes <- read.table("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/important_locus_locations.csv",
+                              sep = ",",
+                              header = TRUE,
+                              stringsAsFactors = FALSE)
+
+head(important_genes)
+important_genes <- merge(important_genes, chrom_lengths, all.x = TRUE, all.y = FALSE)
+head(important_genes)
+#add scaled chromosome position
+important_genes$perc_location <- ceiling((important_genes$location/important_genes$chrom_length)*1000000000)
+bin_sizes <- c(2500, 1000)
+```
+
+```{r}
+for (bin_size in bin_sizes){
+  
+  block_set_file <- paste0(set_dir, "blocks_coverage_", bin_size, "kbp.csv")
+  block_set_file
+  coverage <- read.table(block_set_file,
+                         sep = ",",
+                         header = TRUE,
+                         stringsAsFactors = FALSE)
+  
+  
+  head(coverage)
+  unique(coverage$coverage)
+  
+  
+  
+  coverage_len <- merge(coverage, chrom_lengths, all.x = TRUE, all.y = FALSE)
+  
+  #also add a column that has generic chromosome name
+  coverage_len$chromosome <- str_split_fixed(coverage_len$seqnames, "_", 2)[,1]
+  head(coverage_len)
+  
+  #calculate each chunk as a percentage of the length of the chromosome
+  coverage_len$width_perc <- (coverage_len$width/coverage_len$chrom_length)*100
+  
+
+  ## add the scaled chromosome positions to coverage_len_gen
+  coverage_len$start_perc <- ceiling((coverage_len$start/coverage_len$chrom_length)*1000000000)
+  coverage_len$end_perc <- ceiling((coverage_len$end/coverage_len$chrom_length)*1000000000)
+  coverage_len$perc_chrom_length <- 1000000001
+  
+  
+
+  # generate the  chromosome length vector for the scaled chromosome plots
+  perc_chrom_length <- rep(1000000001, length(unique(coverage_len$chromosome)))
+  names(perc_chrom_length) <- unique(coverage_len$chromosome)
+  perc_chrom_length <- perc_chrom_length[order(names(perc_chrom_length))]
+  
+  
+  #order the main table by chromosome and then coverage (to ensure correct order of plotting)
+  coverage_len_gen_ordered <- coverage_len[order(coverage_len$chromosome), ]
+  coverage_len_gen_ordered <- coverage_len_gen_ordered[order(coverage_len_gen_ordered$coverage),]
+  
+  # want the coverage to be discrete not continuous
+  coverage_len_gen_ordered$cov_discrete <- coverage_len_gen_ordered$coverage
+  coverage_len_gen_ordered$cov_discrete <- as.factor(as.character(coverage_len_gen_ordered$cov_discrete))
+  
+  #cap at greater than 4 for the summary plotting
+  coverage_len_gen_ordered_high <- coverage_len_gen_ordered[coverage_len_gen_ordered$coverage > 4,]
+  coverage_len_gen_ordered_high <- coverage_len_gen_ordered_high[order(coverage_len_gen_ordered_high$coverage),]
+  
+
+  #Plot the highly conserved regions across all assemblies
+  
+  
+  #get the viridis colours so we can specify the scale to start at 5
+  vir_colours <- viridis(11)
+  names(vir_colours) <- as.character(seq(1, 11))
+  
+  coverage_len_gen_ordered_high$cov_discrete <- factor(coverage_len_gen_ordered_high$cov_discrete, levels = as.character(seq(1, 11)))
+  
+  coverage_GR_high <- GRanges(seqnames = coverage_len_gen_ordered_high$chromosome,
+                         ranges = IRanges(start = coverage_len_gen_ordered_high$start_perc,
+                                          end = coverage_len_gen_ordered_high$end_perc),
+                         seqlengths = perc_chrom_length,
+                         coverage = coverage_len_gen_ordered_high$coverage,
+                         cov_discrete = coverage_len_gen_ordered_high$cov_discrete)
+  
+
+  important_genes_GR <- GRanges(seqnames = important_genes$seqnames,
+                         ranges = IRanges(start = important_genes$perc_location,
+                                          end = important_genes$perc_location+1),
+                         y_value = 1,
+                         y_value_label = -6,
+                         seqlengths = perc_chrom_length,
+                         IDs = important_genes$Locus) 
+  
+    summarised_conserved <- autoplot(coverage_GR_high, layout = "karyogram", aes(fill = cov_discrete, colour = cov_discrete), lwd = 0.2) +
+    #scale_fill_viridis(discrete = TRUE)
+    scale_fill_manual(values = vir_colours) +
+    scale_colour_manual(values = vir_colours) +
+      layout_karyogram(data = important_genes_GR,
+                       geom = "point",
+                       aes(x = start, y = y_value, label = IDs),
+                       colour = "red",
+                       fill = "red",
+                       size = 1,
+                       shape = 2) +
+      layout_karyogram(data = important_genes_GR,
+                       geom = "text",
+                       aes(x = start, y = y_value_label, label = IDs),
+                       colour = "black",
+                       size = 3)
+  
+  summarised_conserved
+  
+  
+
+  
+  
+  width = 6
+  height = 6
+  pdf(paste0(out_dir,"extended_data_5_summarised_conserved_regions_", bin_size, "bin.pdf"), width = width, height = height)
+  print(summarised_conserved)
+  dev.off()
+
+}
+```

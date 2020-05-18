@@ -1,0 +1,576 @@
+---
+title: "Figure 2 plots"
+author: "Jemima Brinton"
+date: "23/04/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(ggbio)
+library(stringr)
+library(GenomicRanges)
+library(viridis)
+library(scales)
+
+
+bin_data_percent <- function(data, bin_size){
+  bins <- seq(0, 100, by = bin_size)
+  data$bin <- NA
+  for (i in bins){
+    data$bin <- ifelse(((data$percent_pos > (i-bin_size)) & (data$percent_pos <= (i))), i, data$bin)
+  }
+  return(data)
+}
+
+```
+
+First of all the plots for the stats about the blocks - i.e. block length and number of genes summarised by chromosome and shaded with the chrom partitions
+
+```{r}
+data_dir <- "X:/brintonj/haplotype/summary_stats/block_stats_by_slice_500kbp/"
+output_dir <- "Y:/Publications/Haplotypes/Figures/figure_2/"
+files <- list.files(data_dir, pattern = "tsv.gz")
+files
+
+#we will only use the 5000 bin in the main figure
+
+bin_size <- 5000
+
+region <- data.frame(matrix(NA, ncol = 3, nrow = 5))
+colnames(region) <- c("region", "start", "end")
+region$region <- c("R1", "R2a", "C", "R2b", "R3")
+region$start <-c(0, 9, 28, 50, 80)
+region$end <- c(9, 28, 50, 80, 100)
+
+alpha <- 0.7
+fill_R1R3 <- "#1f3a88"
+fill_R2 <- "#39b4c1"
+fill_C <- "#fffad2"
+```
+
+```{r}
+#Read in the chromosome lengths for chinese spring
+chrom_lengths <- read.table("W:/WGAv1.0/161010_Chinese_Spring_v1.0_pseudomolecules.fai",
+                            sep = "\t", 
+                            header = FALSE,
+                            stringsAsFactors = FALSE)
+
+head(chrom_lengths)
+colnames(chrom_lengths)[c(1,2)] <- c("chromosome", "chrom_length")
+  
+file_path <- paste0(data_dir, "Block_slice500k_stats_Tae_", bin_size, "kbp.tsv.gz")
+  
+stats <- read.table(gzfile(file_path),
+                      sep = "\t", 
+                      header = TRUE, 
+                      stringsAsFactors = FALSE)
+
+percentile_stats <- merge(stats, chrom_lengths[,c("chromosome", "chrom_length")], all.x = TRUE, all.y = FALSE)
+
+percentile_stats$percent_pos <- (percentile_stats$slice/percentile_stats$chrom_length)*100
+
+binned_data <- bin_data_percent(percentile_stats, bin_size = 1)
+head(binned_data)
+```
+
+Plot block length plots
+```{r}
+#calculate and plot block length data
+binned_block_length_median_chrom <- aggregate(block_length ~ bin + chromosome, data = binned_data, FUN = median)
+#now consensus median
+binned_block_length_median <- aggregate(block_length ~ bin, data = binned_block_length_median_chrom, FUN = median)
+
+ymax <- ceiling(max(binned_block_length_median_chrom$block_length))
+
+  
+length_axes <- ggplot(binned_block_length_median_chrom, aes(x = bin, y = block_length, group = bin)) +
+    annotate("rect", xmin = region[region$region == "R1","start"], xmax = region[region$region == "R1","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R1R3) +
+    annotate("rect", xmin = region[region$region == "R2a","start"], xmax = region[region$region == "R2a","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R2) +
+    annotate("rect", xmin = region[region$region == "C","start"], xmax = region[region$region == "C","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_C) +
+    annotate("rect", xmin = region[region$region == "R2b","start"], xmax = region[region$region == "R2b","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R2) +
+    annotate("rect", xmin = region[region$region == "R3","start"], xmax = region[region$region == "R3","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R1R3) +
+    geom_boxplot(outlier.shape = NA, fill = "white") +
+    #ggtitle(paste0(bin_size, "kbp chrom_summarised")) +
+    theme_bw() +
+    scale_x_continuous(breaks=seq(0,100,10)) +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,50000000))
+#length_axes
+
+length <- length_axes +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+ #length                                   
+
+```
+
+```{r}
+  #now plot the number of genes
+  binned_genes_median_chrom <- aggregate(genes ~ bin + chromosome, data = binned_data, FUN = median)
+  binned_genes_median <- aggregate(genes ~ bin, data = binned_genes_median_chrom, FUN = median)
+ 
+
+ymax <- max(binned_genes_median_chrom$genes)
+
+  
+genes_axes <-  ggplot(binned_genes_median_chrom, aes(x = bin, y = genes, group = bin)) +
+    annotate("rect", xmin = region[region$region == "R1","start"], xmax = region[region$region == "R1","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R1R3) +
+    annotate("rect", xmin = region[region$region == "R2a","start"], xmax = region[region$region == "R2a","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R2) +
+    annotate("rect", xmin = region[region$region == "C","start"], xmax = region[region$region == "C","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_C) +
+    annotate("rect", xmin = region[region$region == "R2b","start"], xmax = region[region$region == "R2b","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R2) +
+    annotate("rect", xmin = region[region$region == "R3","start"], xmax = region[region$region == "R3","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R1R3) +
+    geom_boxplot(outlier.shape = NA, fill = "white") +
+    #ggtitle(paste0(bin_size, "kbp chrom_summarised")) +
+    theme_bw() +
+    #theme(strip.text.y=element_text(angle=180, size=5),
+          #strip.background=element_blank(),
+          #legend.position = "none",
+          #axis.title.x=element_blank(),
+          #axis.text.x=element_blank(),
+          #axis.title.y=element_blank(),
+          #axis.text.y=element_blank(),) +
+    scale_x_continuous(breaks=seq(0,100,10)) +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,500))
+
+
+genes <- genes_axes +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+genes                                     
+
+
+```
+
+PDFs
+```{r}
+width = 15
+height = 3
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_2/figure_2_block_length_with_legend.pdf", width = width, height = height)
+print(length_axes)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_2/figure_2_block_length.pdf", width = width, height = height)
+print(length)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_2/figure_2_number_of_genes_with_legend.pdf", width = width, height = height)
+print(genes_axes)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_2/figure_2_number_of_genes.pdf", width = width, height = height)
+print(genes)
+dev.off()
+```
+
+
+Ok also would like to plot summary boxplots for each region and then can do stats and summary values
+
+```{r}
+region_colours <- c("R1" = "#1f3a88", "R2a" = "#39b4c1", "C" = "#fffad2", "R2b" = "#39b4c1", "R3" = "#1f3a88" )
+ymax = max(binned_block_length_median_chrom$block_length)
+head(binned_block_length_median_chrom)
+region
+
+binned_block_length_median_chrom$region <- NA
+for (i in seq(1, nrow(region))){
+  region_id <- region[i,"region"]
+  binned_block_length_median_chrom$region <- ifelse(((binned_block_length_median_chrom[, "bin"] > region[i,"start"]) & (binned_block_length_median_chrom[, "bin"] <= region[i,"end"])), region_id, binned_block_length_median_chrom$region)
+}
+
+binned_block_length_median_chrom$region <- factor(binned_block_length_median_chrom$region, levels = c("R1", "R2a", "C", "R2b", "R3"))
+
+summary_length_axes <-  ggplot(binned_block_length_median_chrom, aes(y = block_length, x = region, fill = region)) +
+    geom_boxplot(outlier.shape = NA, fill = region_colours) +
+    theme_bw() +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,50000000))
+
+print(summary_length_axes)
+
+summary_length <- summary_length_axes +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+print(summary_length)
+
+print(aggregate(block_length ~ region, data = binned_block_length_median_chrom, FUN = median))
+
+print(pairwise.wilcox.test(x = binned_block_length_median_chrom$block_length, g = binned_block_length_median_chrom$region, p.adjust.method = "BH"))
+```
+
+Now the same but for number of genes
+
+```{r}
+region_colours <- c("R1" = "#1f3a88", "R2a" = "#39b4c1", "C" = "#fffad2", "R2b" = "#39b4c1", "R3" = "#1f3a88" )
+ymax = max(binned_genes_median_chrom$genes)
+head(binned_genes_median_chrom)
+region
+
+binned_genes_median_chrom$region <- NA
+for (i in seq(1, nrow(region))){
+  region_id <- region[i,"region"]
+  binned_genes_median_chrom$region <- ifelse(((binned_genes_median_chrom[, "bin"] > region[i,"start"]) & (binned_genes_median_chrom[, "bin"] <= region[i,"end"])), region_id, binned_genes_median_chrom$region)
+}
+
+binned_genes_median_chrom$region <- factor(binned_genes_median_chrom$region, levels = c("R1", "R2a", "C", "R2b", "R3"))
+
+summary_genes_axes <-  ggplot(binned_genes_median_chrom, aes(y = genes, x = region, fill = region)) +
+    geom_boxplot(outlier.shape = NA, fill = region_colours) +
+    theme_bw() +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,500))
+
+print(summary_genes_axes)
+
+summary_genes <- summary_genes_axes +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+print(summary_genes)
+
+print(aggregate(genes ~ region, data = binned_genes_median_chrom, FUN = median))
+
+print(aggregate(genes ~ region, data = binned_genes_median_chrom, FUN = range))
+
+print(pairwise.wilcox.test(x = binned_genes_median_chrom$genes, g = binned_genes_median_chrom$region, p.adjust.method = "BH"))
+
+```
+```{r}
+width = 4
+height = 3
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_2/figure_2_block_length_with_legend_summary.pdf", width = width, height = height)
+print(summary_length_axes)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_2/figure_2_block_length_summary.pdf", width = width, height = height)
+print(summary_length)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_2/figure_2_number_of_genes_with_legend_summary.pdf", width = width, height = height)
+print(summary_genes_axes)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_2/figure_2_number_of_genes_summary.pdf", width = width, height = height)
+print(summary_genes)
+dev.off()
+```
+
+Now generate the shared percentage figures
+
+Process data
+
+```{r}
+shared_data_dir <- "C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/unique_shared_regions/"
+
+set <- "all_assemblies"
+bin_size <- 5000
+
+set_dir <- paste0(shared_data_dir, set, "/")
+block_set_file <- paste0(set_dir, "blocks_coverage_", bin_size, "kbp.csv")
+block_set_file
+coverage <- read.table(block_set_file,
+                       sep = ",",
+                       header = TRUE,
+                       stringsAsFactors = FALSE)
+
+
+#remove the spelt
+coverage <- coverage[!(coverage$assembly == "spelta"),]
+
+head(coverage)
+unique(coverage$coverage)
+
+chrom_lengths_pangenome <- read.table("W:/assemblies/releasePGSBv2.0/genome/combined_fai.txt",
+                                      header = FALSE,
+                                      stringsAsFactors = FALSE)
+
+head(chrom_lengths_pangenome)
+
+chrom_lengths_refseq <- read.table("W:/WGAv1.0/161010_Chinese_Spring_v1.0_pseudomolecules.fai", 
+                                   sep = "\t", 
+                                   header = FALSE,
+                                   stringsAsFactors = FALSE)
+
+head(chrom_lengths_refseq)
+
+chrom_lengths <- rbind(chrom_lengths_pangenome[,c(1,2)], chrom_lengths_refseq[,c(1,2)])
+colnames(chrom_lengths) <- c("seqnames", "chrom_length")
+
+head(chrom_lengths)
+
+coverage_len <- merge(coverage, chrom_lengths, all.x = TRUE, all.y = FALSE)
+
+#add a column that is the binary coverage
+coverage_len$coverage_binary <- coverage_len$coverage
+coverage_len[coverage_len$coverage_binary > 0, "coverage_binary"] <- 1
+
+#also add a column that has generic chromosome name
+coverage_len$chromosome <- str_split_fixed(coverage_len$seqnames, "_", 2)[,1]
+head(coverage_len)
+
+#calculate each chunk as a percentage of the length of the chromosome
+coverage_len$width_perc <- (coverage_len$width/coverage_len$chrom_length)*100
+
+#summarise the binary coverage by chromosome
+coverage_binary_chrom <- aggregate(width_perc ~ assembly + coverage_binary + chromosome, data = coverage_len, FUN = sum)
+
+#order the chromosomes
+chromosomes <- unique(coverage_binary_chrom$chromosome)
+coverage_binary_chrom$chromosome <- factor(coverage_binary_chrom$chromosome, levels = chromosomes[order(chromosomes, decreasing = TRUE)])
+
+#calculate total genome size for each variety
+genome_sizes <- aggregate(chrom_length ~ assembly, data = unique(coverage_len[,c("assembly", "chrom_length")]), FUN = sum)
+colnames(genome_sizes)[2] <- "genome_size"
+
+#merge the with the genome sizes to calculate the percentage coverage of whole genome
+coverage_len_gen <- merge(coverage_len, genome_sizes, all.x = TRUE, all.y = FALSE)
+coverage_len_gen$width_genome_perc <- (coverage_len_gen$width/coverage_len_gen$genome_size)*100 
+head(coverage_len_gen)
+
+#now summarise as a percentage of the whole genome
+coverage_binary_genome <- aggregate(width_genome_perc ~ assembly + coverage_binary, data = coverage_len_gen, FUN = sum)
+
+#combine the genome summarised with the chromosome summarised
+coverage_binary_genome_to_add <- coverage_binary_genome
+colnames(coverage_binary_genome_to_add)[3] <- "width_perc"
+coverage_binary_genome_to_add$chromosome <- "genome"
+coverage_binary_genome_to_add <- coverage_binary_genome_to_add[,c("assembly", "coverage_binary", "chromosome", "width_perc")]
+coverage_binary_genome_chrom <- rbind(coverage_binary_genome_to_add, coverage_binary_chrom)
+
+#order the chromosome names including "genome"
+coverage_binary_genome_chrom$chromosome <- factor(coverage_binary_genome_chrom$chromosome, levels = c(chromosomes[order(chromosomes, decreasing = TRUE)], "genome"))
+
+#order from least to most shared genome percentage
+#this is the final modification to coverage_binary_genome_chrom before plotting
+assembly_shared_genome <- coverage_binary_genome_to_add[coverage_binary_genome_to_add$coverage_binary == 1,]
+coverage_binary_genome_chrom$chromosome <- factor(coverage_binary_genome_chrom$chromosome, levels = c(chromosomes[order(chromosomes, decreasing = TRUE)], "genome"))
+coverage_binary_genome_chrom$assembly <- factor(coverage_binary_genome_chrom$assembly, levels = assembly_shared_genome[order(assembly_shared_genome$width_perc), "assembly"])
+
+## add the scaled chromosome positions to coverage_len_gen
+coverage_len_gen$start_perc <- ceiling((coverage_len_gen$start/coverage_len_gen$chrom_length)*1000000000)
+coverage_len_gen$end_perc <- ceiling((coverage_len_gen$end/coverage_len_gen$chrom_length)*1000000000)
+coverage_len_gen$perc_chrom_length <- 1000000001
+
+
+#add the cap at 5 for the jagger plot
+coverage_len_gen$coverage_cap5 <- coverage_len_gen$coverage
+coverage_len_gen[coverage_len_gen$coverage_cap5 >= 5, "coverage_cap5"] <- 5
+
+#calculate the capped percentage summaries for chromosomes
+coverage_chromosome_cap5 <- aggregate(width_perc ~ assembly + chromosome + coverage_cap5, data = coverage_len_gen, FUN = sum)
+
+#add in the genome to the summaries
+coverage_cap5_genome <- aggregate(width_genome_perc ~ assembly + coverage_cap5, data = coverage_len_gen, FUN = sum)
+
+colnames(coverage_cap5_genome)[3] <- "width_perc"
+coverage_cap5_genome$chromosome <- "genome"
+coverage_cap5_genome <- coverage_cap5_genome[,c("assembly", "coverage_cap5", "chromosome", "width_perc")]
+
+#combine the chromosome caps and genome caps
+coverage_cap5_genome_chrom <- rbind(coverage_cap5_genome, coverage_chromosome_cap5)
+
+# generate the  chromosome length vector for the scaled chromosome plots
+perc_chrom_length <- rep(1000000001, length(unique(coverage_len_gen$chromosome)))
+names(perc_chrom_length) <- unique(coverage_len_gen$chromosome)
+perc_chrom_length <- perc_chrom_length[order(names(perc_chrom_length))]
+
+
+#order the main table by chromosome and then coverage (to ensure correct order of plotting)
+coverage_len_gen_ordered <- coverage_len_gen[order(coverage_len_gen$chromosome), ]
+coverage_len_gen_ordered <- coverage_len_gen_ordered[order(coverage_len_gen_ordered$coverage),]
+
+# want the coverage to be discrete not continuous
+coverage_len_gen_ordered$cov_discrete <- coverage_len_gen_ordered$coverage
+coverage_len_gen_ordered$cov_discrete <- as.factor(as.character(coverage_len_gen_ordered$cov_discrete))
+
+#cap at greater than 4 for the summary plotting
+coverage_len_gen_ordered_high <- coverage_len_gen_ordered[coverage_len_gen_ordered$coverage > 4,]
+coverage_len_gen_ordered_high <- coverage_len_gen_ordered_high[order(coverage_len_gen_ordered_high$coverage),]
+
+```
+```{r}
+text_size <- 4
+overall_shared_plot_axes <- ggplot(coverage_binary_genome_chrom[coverage_binary_genome_chrom$coverage_binary == 1,], aes(y = chromosome, x = assembly)) +
+  geom_tile(aes(fill = width_perc)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90)) +
+    scale_fill_viridis(option = "inferno", limits = c(0,100)) +
+  geom_text(aes(label = round(width_perc, digits = 1)), colour = "gray45", size = text_size)
+
+print(overall_shared_plot_axes)
+
+overall_shared_plot <- overall_shared_plot_axes +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+print(overall_shared_plot)
+```
+
+```{r}
+assembly <- "jagger"
+
+assembly_data <- coverage_cap5_genome_chrom[coverage_cap5_genome_chrom$assembly == assembly,]
+  
+assembly_data$chromosome <- factor(assembly_data$chromosome, levels = c(chromosomes[order(chromosomes, decreasing = TRUE)], "genome"))
+
+#add the missing data to be 0
+assembly <- rep("jagger", 6)
+chromosome <- c("chr1B", "chr5D", "chr5D", "chr6B", "chr6B", "chr7B")
+coverage_cap5 <- c(5, 4, 5, 4, 5, 5)
+width_perc <- rep(0, 6)
+
+to_add <- data.frame(assembly, chromosome, coverage_cap5, width_perc)
+assembly_data <- rbind(assembly_data, to_add)
+
+cap5_plot_axes <- ggplot(assembly_data[assembly_data$coverage >0,], aes(y = chromosome, x = coverage_cap5)) +
+    geom_tile(aes(fill = width_perc)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90)) +
+    scale_fill_viridis(option = "inferno", limits = c(0, 100)) +
+    geom_text(aes(label = round(width_perc, digits = 1)), colour = "gray45", size = text_size)
+  
+print(cap5_plot_axes)
+
+cap5_plot <- cap5_plot_axes +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+print(cap5_plot)
+
+```
+
+
+now the chromosome summary plot
+
+```{r}
+gr_bins <- coverage_len_gen_ordered[coverage_len_gen_ordered$assembly == assembly,]
+
+var_lengths_df <- unique(gr_bins[, c("chromosome", "chrom_length")])
+var_lengths_df <- var_lengths_df[order(var_lengths_df$chromosome),]
+var_lengths <- var_lengths_df$chrom_length
+names(var_lengths) <- var_lengths_df$chromosome
+
+gr_bins <- gr_bins[order(gr_bins$coverage),]
+
+gr_bins_no0 <- gr_bins[gr_bins$coverage > 0,]
+gr_bins_no0$cov_discrete <- factor(gr_bins_no0$cov_discrete, levels = seq(1, max(gr_bins_no0$coverage)))
+
+gr_bins_GR_no0 <- GRanges(seqnames = gr_bins_no0$chromosome,
+                       ranges = IRanges(start = gr_bins_no0$start,
+                                        end = gr_bins_no0$end),
+                       seqlengths = var_lengths,
+                       coverage = gr_bins_no0$coverage,
+                       cov_discrete = gr_bins_no0$cov_discrete)
+
+
+  
+no0_jagger <- autoplot(gr_bins_GR_no0,  layout = "karyogram", aes(fill=cov_discrete)) + 
+  scale_fill_viridis(discrete = TRUE)
+
+
+
+no0_jagger
+```
+
+
+Plot the highly conserved regions across all assemblies
+
+
+```{r}
+#get the viridis colours so we can specify the scale to start at 5
+vir_colours <- viridis(11)
+names(vir_colours) <- as.character(seq(1, 11))
+
+coverage_len_gen_ordered_high$cov_discrete <- factor(coverage_len_gen_ordered_high$cov_discrete, levels = as.character(seq(1, 11)))
+
+coverage_GR_high <- GRanges(seqnames = coverage_len_gen_ordered_high$chromosome,
+                       ranges = IRanges(start = coverage_len_gen_ordered_high$start_perc,
+                                        end = coverage_len_gen_ordered_high$end_perc),
+                       seqlengths = perc_chrom_length,
+                       coverage = coverage_len_gen_ordered_high$coverage,
+                       cov_discrete = coverage_len_gen_ordered_high$cov_discrete)
+
+
+#summarised_conserved <- autoplot(coverage_GR_high, layout = "karyogram", aes(fill = coverage), lwd = 0) +
+  #scale_fill_viridis(limits=c(1, max(coverage_GR_high$coverage)))
+
+summarised_conserved <- autoplot(coverage_GR_high, layout = "karyogram", aes(fill = cov_discrete, colour = cov_discrete), lwd = 0.2) +
+  #scale_fill_viridis(discrete = TRUE)
+  scale_fill_manual(values = vir_colours) +
+  scale_colour_manual(values = vir_colours)
+
+summarised_conserved
+```
+
+```{r}
+width = 5.4
+height = 6
+pdf("Y:/Publications/Haplotypes/Figures/figure_2/all_shared_percentage.pdf", width = width, height = height)
+print(overall_shared_plot)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_2/all_shared_percentage_axes.pdf", width = width, height = height)
+print(overall_shared_plot_axes)
+dev.off()
+
+png("Y:/Publications/Haplotypes/Figures/figure_2/all_shared_percentage_axes.png", width = width, height = height, units = "in", res = 1500)
+print(overall_shared_plot_axes)
+dev.off()
+
+width = 2
+pdf("Y:/Publications/Haplotypes/Figures/figure_2/jagger_shared_percentage_cap5.pdf", width = width, height = height)
+print(cap5_plot)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_2/jagger_shared_percentage_cap5_axes.pdf", width = width, height = height)
+print(cap5_plot_axes)
+dev.off()
+
+width = 6
+height = 6
+pdf("Y:/Publications/Haplotypes/Figures/figure_2/jagger_whole_chrom.pdf", width = width, height = height)
+print(no0_jagger)
+dev.off()
+
+width = 6
+height = 6
+pdf("Y:/Publications/Haplotypes/Figures/figure_2/summarised_conserved_regions_cap5.pdf", width = width, height = height)
+print(summarised_conserved)
+dev.off()
+
+
+```

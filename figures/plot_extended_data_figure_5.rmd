@@ -1,0 +1,127 @@
+---
+title: "Plots for extended data 5"
+author: "Jemima Brinton"
+date: "12/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(viridis)
+```
+
+Want to plot the % of genome/chromosomes shared with each variety and every other variety
+
+```{r}
+haplotypes <- read.table("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/no_spelta_2gap/no_spelta_2gap/whole_genome_mummer_BLAST_5000000_blocks_combined_updated_ref_coords_10g_corrected_2gap_no_spelta.tsv",
+                         sep = "\t",
+                         header = TRUE,
+                         stringsAsFactors = FALSE)
+
+head(haplotypes)
+
+chrom_lengths_pangenome <- read.table("W:/assemblies/releasePGSBv2.0/genome/combined_fai.txt",
+                                      header = FALSE,
+                                      stringsAsFactors = FALSE)
+
+head(chrom_lengths_pangenome)
+
+chrom_lengths_refseq <- read.table("W:/WGAv1.0/161010_Chinese_Spring_v1.0_pseudomolecules.fai", 
+                                   sep = "\t", 
+                                   header = FALSE,
+                                   stringsAsFactors = FALSE)
+
+head(chrom_lengths_refseq)
+
+chrom_lengths <- rbind(chrom_lengths_pangenome[,c(1,2)], chrom_lengths_refseq[,c(1,2)])
+colnames(chrom_lengths) <- c("ref_chrom", "chrom_length")
+
+head(chrom_lengths)
+
+#add chrom lengths to the haplotype table
+
+haplotypes_chrom_len <- merge(haplotypes, chrom_lengths, all.x = TRUE, all.y = FALSE)
+head(haplotypes_chrom_len)
+
+#calculate each block as a percentage of chromosome length
+haplotypes_chrom_len$block_size_perc <- (haplotypes_chrom_len$block_size / haplotypes_chrom_len$chrom_length)*100
+head(haplotypes_chrom_len)
+
+# now we want to make a summary table with each ref, query, chromosome and percentage
+percentage_ref_query_chrom <- aggregate(block_size_perc ~ ref + query + chrom, data = haplotypes_chrom_len, FUN = sum)
+head(percentage_ref_query_chrom)
+
+#also want to calculate the whole genome value for each comparison
+genome_sizes <- aggregate(chrom_length ~ ref, data = unique(haplotypes_chrom_len[,c("ref", "chrom_length")]), FUN = sum)
+colnames(genome_sizes)[2] <- "genome_size"
+head(genome_sizes)
+
+#for the EI varieties we have an issue - since the block sizes are counted as coords in the reciprocal alignment where available, the genome size calculation is > than 21 chromosomes. Since we use the RefSeqv1.1 positions when considering EI EI varieties, we will use the chinese spring total genome size
+EI_var <- c("cadenza", "claire", "paragon", "robigus", "weebil")
+genome_sizes[genome_sizes$ref %in% EI_var, "genome_size"] <- genome_sizes[genome_sizes$ref == "chinese", "genome_size"]
+head(genome_sizes)
+
+haplotypes_chrom_len_genome <- merge(haplotypes_chrom_len, genome_sizes, all.x = TRUE, all.y = FALSE)
+head(haplotypes_chrom_len_genome)
+
+haplotypes_chrom_len_genome$block_size_perc_genome <- (haplotypes_chrom_len_genome$block_size / haplotypes_chrom_len_genome$genome_size)*100
+head(haplotypes_chrom_len_genome)
+
+# now we want to make a summary table with each ref, query and genome percentage
+percentage_ref_query_genome <- aggregate(block_size_perc_genome ~ ref + query, data = haplotypes_chrom_len_genome, FUN = sum)
+head(percentage_ref_query_genome)
+percentage_ref_query_genome$chrom <- "genome"
+colnames(percentage_ref_query_genome)[3] <- "block_size_perc"
+percentage_ref_query_genome <- percentage_ref_query_genome[,c("ref", "query", "chrom", "block_size_perc")]
+
+#combine the chromosome and genome into a single data frame
+percentage_ref_query_chrom_genome <- rbind(percentage_ref_query_genome, percentage_ref_query_chrom)
+head(percentage_ref_query_chrom_genome)
+#set the y axis order for plotting
+chromosomes <- unique(percentage_ref_query_chrom$chrom)
+percentage_ref_query_chrom_genome$chrom <- factor(percentage_ref_query_chrom_genome$chrom, levels = c(chromosomes[order(chromosomes, decreasing = TRUE)], "genome"))
+
+```
+
+Ok now we want to plot a heatmap per reference variety
+```{r}
+text_size <- 4
+width = 5.8
+height = 6.5
+res = 8000
+
+refs <- unique(percentage_ref_query_chrom_genome$ref)
+
+for (i in seq(1, length(refs))){
+  ref <- refs[i]
+  print(ref)
+  ref_data <- percentage_ref_query_chrom_genome[percentage_ref_query_chrom_genome$ref == ref,]
+  
+  #want to order the ref data based on the shared genome percentage
+  genome_shared <- ref_data[ref_data$chrom == "genome",]
+  genome_shared <- genome_shared[order(genome_shared$block_size_perc),]
+  ref_data$query <- factor(ref_data$query, levels = genome_shared$query)
+  
+  ref_shared_plot <- ggplot(ref_data, aes(y = chrom, x = query)) +
+    geom_tile(aes(fill = block_size_perc)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90), panel.background = element_rect(fill = "black"), panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(), legend.position = "none") +
+    scale_fill_viridis(option = "inferno", limits = c(0,100)) +
+    geom_text(aes(label = round(block_size_perc, digits = 1)), colour = "gray45", size = text_size) +
+    ggtitle(ref)
+  
+  print(ref_shared_plot)
+  
+
+#png(paste0("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/shared_genome_percentage_", ref, ".png"), width = width, height #= height, units = "in", res = res)
+#print(ref_shared_plot)
+#dev.off()
+
+pdf(paste0("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/shared_genome_percentage_", ref, ".pdf"), width = width, height = height)
+print(ref_shared_plot)
+dev.off()
+}
+
+```

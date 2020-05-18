@@ -1,0 +1,95 @@
+---
+title: "Plot haplotype specific markers"
+author: "Jemima Brinton"
+date: "15/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+
+convert_long_01_AB <- function(data){
+  converted <- data.frame(marker=character(), variable = character(),  value = numeric(),pos = numeric())
+  markers <- unique(data$marker)
+
+  for (i in seq(1, length(markers))){
+    marker <- markers[i]
+    marker_data <- data[data$marker == marker,]
+    snp_calls <- unique(marker_data$value)
+    alleles <- snp_calls[(snp_calls %in% c("A", "B"))]
+    #make sure chinese spring allele is always 0
+    CS_allele <- marker_data[marker_data$variable == "CHINESE", "value"]
+    alt_allele <- alleles[!(alleles %in% CS_allele)]
+    marker_data$value <- gsub(CS_allele, "0", marker_data$value)
+    marker_data$value <- gsub(alt_allele, "1", marker_data$value)
+    converted <- rbind(converted, marker_data)
+  }
+  converted$value <- gsub("N", "NA", converted$value)
+  converted$value <- as.numeric(converted$value)
+  return(converted)
+}
+
+plot_capture_specified_order_small <- function(data, start, end, outfile_prefix, order_list){
+  data_zoom <- data[(data$pos > start) & (data$pos < end),]
+  data_zoom$variable <- factor(x = data_zoom$variable, levels = order_list, ordered = TRUE)
+  plot <- ggplot(data_zoom , aes(x=factor(pos),y=variable)) +
+		geom_tile(aes(fill = value), color = "gray") +
+		#scale_fill_distiller(limits=c(0,1), type='div', palette="YlGnBu", na.value = "gray94", direction = 1, name = "allele") +
+    #scale_fill_continuous(type = "viridis") +
+    scale_fill_gradient(low = "grey70", high = "grey20", na.value = "white", aesthetics = "fill") +
+    theme_bw() +
+		theme(axis.text.x=element_text(angle=90, hjust=1)) #+
+    #geom_point( aes( x = "TraesCS6A02G189400.1", y=aln_type, colour = "red" ) )
+  #ggsave(plot = plot, file = paste0(outfile_prefix, "_heatmap.png"), dpi = 600, height = 6, width = 6)
+  return(plot)
+}
+```
+
+```{r}
+hap_specific <- read.table("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/haplotype_specific_markers_pangenome.csv", 
+                           sep = ",", 
+                           header = TRUE, 
+                           stringsAsFactors = FALSE)
+
+hap_specific_long <- melt(hap_specific, id.vars = c("marker", "pos"))
+
+#hap_specific_01 <- convert_long_01(hap_specific_long)
+data <- hap_specific_long
+converted <- data.frame(marker=character(), variable = character(),  value = numeric(),pos = numeric())
+  markers <- unique(data$marker)
+
+  for (i in seq(1, length(markers))){
+    marker <- markers[i]
+    marker_data <- data[data$marker == marker,]
+    snp_calls <- unique(marker_data$value)
+    alleles <- snp_calls[(snp_calls %in% c("A", "B"))]
+    #make sure chinese spring allele is always 0
+    CS_allele <- marker_data[marker_data$variable == "CHINESE", "value"]
+    alt_allele <- alleles[!(alleles %in% CS_allele)]
+    marker_data$value <- gsub(CS_allele, "0", marker_data$value)
+    marker_data$value <- gsub(alt_allele, "1", marker_data$value)
+    converted <- rbind(converted, marker_data)
+  }
+  converted$value <- gsub("N", "NA", converted$value)
+  converted$value <- as.numeric(converted$value)
+
+hap_specific_order <- c("CHINESE" , "CADENZA", "PARAGON", "NORIN61", "LANCER", "CLAIRE", "JAGGER", "SY", "ROBIGUS", "ARINA", "JULIUS", "WEEBIL", "LANDMARK", "MACE", "STANLEY")
+
+hap_specific_01 <- converted
+
+to_plot_subset <- subset(hap_specific_01, variable %in% hap_specific_order)
+
+
+plot_hap_specific <- plot_capture_specified_order_small(to_plot_subset, 187000000, 445000000, outfile_prefix = "test", order_list = rev(hap_specific_order))
+plot_hap_specific
+
+width = 5
+height = 4
+pdf("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/haplotype_specific_markers.pdf", width = width, height = height)
+print(plot_hap_specific)
+dev.off()
+```

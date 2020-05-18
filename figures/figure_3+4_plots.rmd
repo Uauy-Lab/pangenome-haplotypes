@@ -1,0 +1,612 @@
+---
+title: "figure_3_plots"
+author: "Jemima Brinton"
+date: "04/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(stringr)
+library(ggplot2)
+library(GenomicRanges)
+library(ggbio)
+library(viridis)
+library(reshape2)
+library("ggalluvial")
+library(RColorBrewer)
+
+
+convert_long_01 <- function(data){
+  converted <- data.frame(marker=character(), variable = character(),  value = numeric(),pos = numeric())
+  markers <- unique(data$marker)
+
+  for (i in seq(1, length(markers))){
+    marker <- markers[i]
+    marker_data <- data[data$marker == marker,]
+    snp_calls <- unique(marker_data$value)
+    alleles <- snp_calls[(snp_calls %in% c("A", "C", "T", "G"))]
+    #make sure chinese spring allele is always 0
+    CS_allele <- marker_data[marker_data$variable == "CHINESE", "value"]
+    alt_allele <- alleles[!(alleles %in% CS_allele)]
+    marker_data$value <- gsub(CS_allele, "0", marker_data$value)
+    marker_data$value <- gsub(alt_allele, "1", marker_data$value)
+    converted <- rbind(converted, marker_data)
+  }
+  converted$value <- gsub("N", "NA", converted$value)
+  converted$value <- as.numeric(converted$value)
+  return(converted)
+}
+
+plot_capture_specified_order_small <- function(data, start, end, outfile_prefix, order_list){
+  data_zoom <- data[(data$pos > start) & (data$pos < end),]
+  data_zoom$variable <- factor(x = data_zoom$variable, levels = order_list, ordered = TRUE)
+  plot <- ggplot(data_zoom , aes(x=factor(pos),y=variable)) +
+		geom_tile(aes(fill = value), color = "gray") +
+		#scale_fill_distiller(limits=c(0,1), type='div', palette="YlGnBu", na.value = "gray94", direction = 1, name = "allele") +
+    #scale_fill_continuous(type = "viridis") +
+    scale_fill_gradient(low = "grey70", high = "grey20", na.value = "white", aesthetics = "fill") +
+    theme_bw() +
+		theme(axis.text.x=element_text(angle=90, hjust=1)) #+
+    #geom_point( aes( x = "TraesCS6A02G189400.1", y=aln_type, colour = "red" ) )
+  #ggsave(plot = plot, file = paste0(outfile_prefix, "_heatmap.png"), dpi = 600, height = 6, width = 6)
+  return(plot)
+}
+```
+
+
+Ok now lets make the plots for the different genotyping platforms
+
+```{r}
+cerealsdb_manual <- read.table("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/figures/35K_cerealsdb_hap_examples.csv", 
+                           sep = ",", 
+                           header = TRUE, 
+                           stringsAsFactors = FALSE)
+
+cerealsdb_manual_long <- melt(cerealsdb_manual, id.vars = c("marker", "pos"))
+
+cerealsdb_manual_01 <- convert_long_01(cerealsdb_manual_long)
+
+cerealsdb_order <- c("CHINESE" , "CADENZA", "PARAGON", "NORIN61", "LANCER", "CLAIRE", "JAGGER", "SY", "ROBIGUS", "ARINA", "JULIUS", "WEEBIL", "LANDMARK", "MACE", "STANLEY")
+
+to_plot_subset <- subset(cerealsdb_manual_01, variable %in% cerealsdb_order)
+
+
+plot_manual_35k <- plot_capture_specified_order_small(to_plot_subset, 187000000, 445000000, outfile_prefix = "test", order_list = rev(cerealsdb_order))
+plot_manual_35k
+
+plot_manual_35k_no_axes <- plot_manual_35k +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+plot_manual_35k_no_axes
+```
+
+Do this for the vos fells as well
+
+```{r}
+VF_manual <- read.table("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/figures/voss_fells_hap_examples.csv", 
+                           sep = ",", 
+                           header = TRUE, 
+                           stringsAsFactors = FALSE)
+
+VF_manual_long <- melt(VF_manual, id.vars = c("marker", "pos"))
+
+VF_manual_01 <- convert_long_01(VF_manual_long)
+
+VF_order <- c("CHINESE" , "CADENZA", "PARAGON", "NORIN61", "LANCER", "CLAIRE", "JAGGER", "SY", "ROBIGUS", "ARINA", "JULIUS", "WEEBIL", "LANDMARK", "MACE", "STANLEY", "X9K1")
+
+to_plot_subset <- subset(VF_manual_01, variable %in% VF_order)
+
+plot_manual_VF <- plot_capture_specified_order_small(to_plot_subset, 187000000, 445000000, outfile_prefix = "test", order_list = rev(VF_order))
+plot_manual_VF
+
+plot_manual_VF_no_axes <- plot_manual_VF +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+plot_manual_VF_no_axes
+```
+
+Now the akhunov data
+
+```{r}
+akhunov_manual <- read.table("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/figures/akhunov_hap_examples.csv", 
+                           sep = ",", 
+                           header = TRUE, 
+                           stringsAsFactors = FALSE)
+
+akhunov_manual_long <- melt(akhunov_manual, id.vars = c("marker", "pos"))
+
+akhunov_order <- c("CHINESE" , "CADENZA", "PARAGON", "NORIN61", "LANCER", "CLAIRE", "JAGGER", "SY", "ROBIGUS", "ARINA", "JULIUS", "WEEBIL", "LANDMARK", "MACE", "STANLEY", "Ex1", "Ex2", "Ex3")
+
+to_plot_subset <- subset(akhunov_manual_long, variable %in% akhunov_order)
+
+plot_manual_akhunov <- plot_capture_specified_order_small(to_plot_subset, 187000000, 445000000, outfile_prefix = "test", order_list = rev(akhunov_order))
+plot_manual_akhunov
+
+plot_manual_akhunov_no_axes <- plot_manual_akhunov +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+plot_manual_akhunov_no_axes
+```
+
+Now the SNP distributions
+```{r}
+akhunov_pos <- read.table("X:/brintonj/6A_region/akhunov_capture/all.GP08_mm75_het3_publication01142019.vcf.gz_all6A_HCLC_GT_only.GT.FORMAT_position_only.tsv",
+                       sep = "\t",
+                       header = TRUE, 
+                       stringsAsFactors = FALSE)
+head(akhunov_pos)
+nrow(akhunov_pos)
+nrow(unique(akhunov_pos))
+
+akhunov_unfiltered_pos <- read.table("X:/brintonj/6A_region/akhunov_capture/all.GP08_mm75_het3_publication01142019.vcf.gz_all6A_GT_only.GT.FORMAT_position_only.tsv",
+                       sep = "\t",
+                       header = TRUE, 
+                       stringsAsFactors = FALSE)
+head(akhunov_unfiltered_pos)
+nrow(akhunov_unfiltered_pos)
+nrow(unique(akhunov_unfiltered_pos))
+
+breeders <- read.table("Y:/Jemima/6A/haplotype/35K/35k_probe_set_IWGSCv1.csv",
+                       sep = ",",
+                       header = TRUE, 
+                       stringsAsFactors = FALSE)
+head(breeders)
+
+breeders_6A_pos <- breeders[breeders$IWGSC_v1_Chromosome == "chr6A", c(2,3)]
+colnames(breeders_6A_pos) <- colnames(akhunov_pos)
+
+nrow(breeders_6A_pos)
+nrow(unique(breeders_6A_pos))
+breeders_6A_pos$POS <- as.numeric(breeders_6A_pos$POS)
+head(breeders_6A_pos)
+
+inifinium <- read.table("Y:/Jemima/6A/haplotype/Vos-Fels et al 2019/voss_fells_marker_positions_6A.csv",
+                       sep = ",",
+                       header = TRUE, 
+                       stringsAsFactors = FALSE)
+
+head(inifinium)
+
+inifinium_pos <- inifinium[,c("chrom", "pos")]
+colnames(inifinium_pos) <- colnames(akhunov_pos)
+
+nrow(inifinium_pos)
+nrow(unique(inifinium_pos))
+inifinium_pos$POS <- as.numeric(inifinium_pos$POS)
+head(inifinium_pos)
+
+pangenome_snps <- read.table("Y:/Publications/Haplotypes/Figures/figure_3/pangenome_snp_dist_6A_CS_ref.tsv",
+                             sep = "\t",
+                             header = TRUE,
+                             stringsAsFactors = FALSE)
+
+nrow(pangenome_snps)
+nrow(unique(pangenome_snps))
+colnames(pangenome_snps) <- colnames(akhunov_pos)
+pangenome_snps$POS <- as.numeric(pangenome_snps$POS)
+head(pangenome_snps)
+```
+
+Plots 
+```{r}
+
+
+pangenome_snps <- ggplot(pangenome_snps, aes(x = POS)) +
+  geom_histogram(alpha = 0.5, color = "black", binwidth = 5000000) +
+  theme_bw() +
+  scale_x_continuous(breaks=seq(0,CS_6A_len,100000000))
+
+
+pangenome_snps
+
+pangenome_snps_no_axes <- pangenome_snps +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+pangenome_snps_no_axes
+
+```
+
+```{r}
+
+
+akhunov_snps <- ggplot(akhunov_pos, aes(x = POS)) +
+  geom_histogram(alpha = 0.5, color = "black", binwidth = 5000000) +
+  theme_bw() +
+  scale_x_continuous(breaks=seq(0,CS_6A_len,100000000))
+
+akhunov_snps
+
+akhunov_snps_no_axes <- akhunov_snps +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+akhunov_snps_no_axes
+
+```
+
+```{r}
+
+
+akhunov_unfilt_snps <- ggplot(akhunov_unfiltered_pos, aes(x = POS)) +
+  geom_histogram(alpha = 0.5, color = "black", binwidth = 5000000) +
+  theme_bw() +
+  scale_x_continuous(breaks=seq(0,CS_6A_len,100000000))
+
+akhunov_unfilt_snps
+
+akhunov_unfilt_snps_no_axes <- akhunov_unfilt_snps +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+akhunov_unfilt_snps_no_axes
+
+```
+
+```{r}
+breeders_snps <- ggplot(breeders_6A_pos, aes(x = POS)) +
+  geom_histogram(alpha = 0.5, color = "black", binwidth = 5000000) +
+  theme_bw() +
+  scale_x_continuous(breaks=seq(0,CS_6A_len,100000000))
+breeders_snps
+
+breeders_snps_no_axes <- breeders_snps +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+breeders_snps_no_axes
+```
+
+```{r}
+
+inifinium_snps <- ggplot(inifinium_pos, aes(x = POS)) +
+  geom_histogram(alpha = 0.5, color = "black", binwidth = 5000000) +
+  theme_bw() +
+  scale_x_continuous(breaks=seq(0,CS_6A_len,100000000))
+
+print(inifinium_snps)
+
+inifinium_snps_no_axes <- inifinium_snps +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+inifinium_snps_no_axes
+
+```
+
+Now we want to plots the genotypes of the panels
+
+```{r}
+#calls coming from the public datasets
+haplotype_calls <- read.table(file = "C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/pangenome_haplotype_allocations_35K_all_AK_USA_capture_vossfells_updated_May2020_FINAL_SET_TO_INCLUDE.csv",
+                              sep = ",",
+                              header = TRUE)
+
+
+##calls with the haplotype-specific markers
+marker_calls <- read.table(file = "C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/watkins_analysis/final_haplotypes_watkins_UKRL.csv",
+                              sep = ",",
+                              header = TRUE)
+
+head(marker_calls)
+
+```
+
+```{r}
+
+haplotype_colours <- c("#000080",
+                       "#5FC6BC",
+                       "#008080", 
+                       "#FF7F2a",
+                       "#5F5Fd3", 
+                       "#55DDFF", 
+                       "#A793AC", 
+                       "#DE87CD",
+                       "#C287DE", 
+                       "#D9AEED", 
+                       "#FFE680", 
+                       "#FF5555", 
+                       "#B3DE69",
+                       "#B3B3B3")
+
+
+haplotype_names <- c("H1",
+                     "H1/2",
+                     "H2",
+                     "H3",
+                     "H4",
+                     "H5",
+                     "H6",
+                     "H7",
+                     "H5/6/7",
+                     "H4/5/6/7",
+                     "35K1",
+                     "35K2",
+                     "wat_specific",
+                     "other")
+
+names(haplotype_colours) <- haplotype_names
+
+haplotype_calls_complete <- haplotype_calls[!(haplotype_calls$nonPG_simple_hap == "poor_data"),]
+
+haplotype_calls_complete$nonPG_simple_hap <- factor(haplotype_calls_complete$nonPG_simple_hap, levels = haplotype_names)
+haplotype_calls_complete$group <- factor(haplotype_calls_complete$group, levels = c("UK_RL", "voss_fells", "Australia", "USA","CIMCOG", "Watkins"))
+
+head(haplotype_calls_complete)
+
+```
+
+Try plotting using proportions rather than absolute values
+```{r}
+
+haplotype_calls_complete <- haplotype_calls_complete[complete.cases(haplotype_calls_complete$nonPG_simple_hap),]
+hap_counts <- data.frame(table(haplotype_calls_complete[,c("group", "nonPG_simple_hap")]))
+
+group_counts <- data.frame(table(haplotype_calls_complete$group))
+colnames(group_counts) <- c("group", "total_var")
+hap_counts <- merge(hap_counts, group_counts, all.x = TRUE, all.y = FALSE)
+hap_counts$perc <- (hap_counts$Freq/hap_counts$total_var)*100
+
+group_counts
+
+hap_counts$group <- factor(hap_counts$group, levels = c("UK_RL", "voss_fells", "Australia", "USA","CIMCOG", "Watkins"))
+
+plot <- ggplot(hap_counts, aes(x=group, y = perc, fill = nonPG_simple_hap)) + 
+        geom_bar(stat = "identity", width = 0.7) +
+        ylab("% of varieties") +
+        scale_x_discrete(labels = c(paste0("UK RL \n (n=", group_counts[group_counts$group == "UK_RL","total_var"], ")"),
+                                    paste0("European \n (n=", group_counts[group_counts$group == "voss_fells","total_var"], ")"),
+                                    paste0("Australia \n (n=", group_counts[group_counts$group == "Australia","total_var"], ")"),
+                                    paste0("USA \n (n=", group_counts[group_counts$group == "USA","total_var"], ")"),
+                                    paste0("CIMCOG \n (n=", group_counts[group_counts$group == "CIMCOG","total_var"], ")"),
+                                    paste0("Watkins \n (n=", group_counts[group_counts$group == "Watkins","total_var"], ")"))) +
+        scale_fill_manual(name = "Haplotype", values = haplotype_colours) + theme_bw()
+plot
+
+plot_no_watkins <- ggplot(hap_counts[!(hap_counts$group == "Watkins"),], aes(x=group, y = perc, fill = nonPG_simple_hap)) + 
+        geom_bar(stat = "identity", width = 0.7) +
+        ylab("% of varieties") +
+        scale_x_discrete(labels = c(paste0("UK RL \n (n=", group_counts[group_counts$group == "UK_RL","total_var"], ")"),
+                                    paste0("European \n (n=", group_counts[group_counts$group == "voss_fells","total_var"], ")"),
+                                    paste0("Australia \n (n=", group_counts[group_counts$group == "Australia","total_var"], ")"),
+                                    paste0("USA \n (n=", group_counts[group_counts$group == "USA","total_var"], ")"),
+                                    paste0("CIMCOG \n (n=", group_counts[group_counts$group == "CIMCOG","total_var"], ")"))) +
+        scale_fill_manual(name = "Haplotype", values = haplotype_colours) + theme_bw()
+
+plot_no_watkins
+
+plot_no_watkins_no_axes <- plot_no_watkins +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+plot_no_watkins_no_axes
+
+```
+
+Now the watkins alluvial plots
+
+```{r}
+#melt the dataframe
+#remove_poor_data in both  data sets
+marker_calls_no_missing <- marker_calls[!((marker_calls$previous_summary == "poor_data") | (marker_calls$marker_summary == "poor_data") | (marker_calls$previous_summary == "no_data")), ]
+marker_melt <- melt(marker_calls_no_missing, id.vars = c("line", "group"))
+
+
+head(marker_melt)
+tail(marker_melt)
+
+
+names(haplotype_colours) <- haplotype_names
+
+
+marker_wat_summary <- marker_melt[(marker_melt$group == "watkins") & (marker_melt$variable == "previous_summary" |  marker_melt$variable == "marker_summary"),]
+marker_wat_summary$value <- factor(marker_wat_summary$value, levels = names(haplotype_colours))
+
+unique(marker_wat_summary$value)
+watkins_old_to_new <- ggplot(marker_wat_summary, aes(x = variable, stratum = value, alluvium = line, fill = value)) +
+  geom_flow() +
+  geom_stratum() +
+  scale_fill_manual(name = "Haplotype", values = haplotype_colours) +
+  theme_bw()
+
+watkins_old_to_new
+
+watkins_old_to_new_no_axes <- watkins_old_to_new +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+watkins_old_to_new_no_axes
+```
+
+Now just plot the watkins specific
+
+Plot european data over time
+```{r}
+head(haplotype_calls_complete)
+
+voss_fells <- subset(haplotype_calls_complete, group %in% "voss_fells")
+
+plot_over_time <- ggplot(voss_fells, aes(x = year, fill = nonPG_simple_hap)) + 
+  geom_histogram(position = "stack", binwidth=5, col = "black") +
+  xlab("Year of release (5 year bins)") +
+  ylab("Number of varieties") +
+  scale_fill_manual(name = "Haplotype", values = haplotype_colours, labels = c("H1/2", "H3", "H4", "H5", "H6", "H7", "other")) + theme_bw()
+plot_over_time
+
+```
+
+```{r}
+width = 10
+height = 1
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/summarised_conserved_regions_cap5_6A.pdf", width = width, height = height)
+print(summarised_conserved)
+dev.off()
+
+width = 4
+height = 4
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/haplotype_examples_35K_axes.pdf", width = width, height = height)
+print(plot_manual_35k)
+dev.off()
+
+width = 4
+height = 4
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/haplotype_examples_35K.pdf", width = width, height = height)
+print(plot_manual_35k_no_axes)
+dev.off()
+
+width = 4
+height = 4
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/haplotype_examples_VF_axes.pdf", width = width, height = height)
+print(plot_manual_VF)
+dev.off()
+
+width = 4
+height = 4
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/haplotype_examples_VF.pdf", width = width, height = height)
+print(plot_manual_VF_no_axes)
+dev.off()
+
+width = 4
+height = 4
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/haplotype_examples_akhunov_axes.pdf", width = width, height = height)
+print(plot_manual_akhunov)
+dev.off()
+
+width = 4
+height = 4
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/haplotype_examples_akhunov.pdf", width = width, height = height)
+print(plot_manual_akhunov_no_axes)
+dev.off()
+
+width = 8
+height = 2
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/akhunov_snp_positions_5mbpbin.pdf", width = width, height = height)
+print(akhunov_snps)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/akhunov_snp_positions_5mbpbin_no_axes.pdf", width = width, height = height)
+print(akhunov_snps_no_axes)
+dev.off()
+
+width = 8
+height = 2
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/akhunov_unfiltered_snp_positions_5mbpbin.pdf", width = width, height = height)
+print(akhunov_unfilt_snps)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/akhunov_unfiltered_snp_positions_5mbpbin_no_axes.pdf", width = width, height = height)
+print(akhunov_unfilt_snps_no_axes)
+dev.off()
+
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/9K_snp_positions_5mbpbin.pdf", width = width, height = height)
+print(inifinium_snps)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/9K_snp_positions_5mbpbin_no_axes.pdf", width = width, height = height)
+print(inifinium_snps_no_axes)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/35K_snp_positions_5mbpbin.pdf", width = width, height = height)
+print(breeders_snps)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/35K_snp_positions_5mbpbin_no_axes.pdf", width = width, height = height)
+print(breeders_snps_no_axes)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/pangenome_snp_positions_5mbpbin.pdf", width = width, height = height)
+print(pangenome_snps)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/pangenome_snp_positions_5mbpbin_no_axes.pdf", width = width, height = height)
+print(pangenome_snps_no_axes)
+dev.off()
+
+width = 6
+height = 4
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/panels_public_datasets_calls_no_watkins_no_axes.pdf", width = width, height = height)
+print(plot_no_watkins_no_axes)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/panels_public_datasets_calls_no_watkins.pdf", width = width, height = height)
+print(plot_no_watkins)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/hap_specific_markers_watkins_summary_no_axes.pdf", width = width, height = height)
+print(watkins_old_to_new_no_axes)
+dev.off()
+
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/hap_specific_markers_watkins_summary.pdf", width = width, height = height)
+print(watkins_old_to_new)
+dev.off()
+
+
+width = 1.5
+height = 4
+pdf("Y:/Publications/Haplotypes/Figures/figure_3/hap_specific_markers_watkins_specific_no_axes.pdf", width = width, height = height)
+print(watkins_specific_no_axes)
+dev.off()
+
+width = 5
+height = 4
+pdf("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/european_data_over_time.pdf", width = width, height = height)
+print(plot_over_time)
+dev.off()
+
+```

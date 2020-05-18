@@ -1,0 +1,480 @@
+---
+title: "Supplemental_plots"
+author: "Jemima Brinton"
+date: "20/04/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(magrittr)
+library(GenomicRanges)
+library(ggplot2)
+library(tidyr)
+library(viridis)
+library(stringr)
+library(gridExtra)
+
+
+#Read Delta functions and plotting functions (adapted) used are from https://jmonlong.github.io/Hippocamplus/2017/09/19/mummerplots-with-ggplot2/
+#Reads in delta file output from nucmer into R and summarises into dataframe
+readDelta <- function(deltafile){
+  lines = scan(deltafile, 'a', sep='\n', quiet=TRUE)
+  lines = lines[-1]
+  lines.l = strsplit(lines, ' ')
+  lines.len = lapply(lines.l, length) %>% as.numeric
+  lines.l = lines.l[lines.len != 1]
+  lines.len = lines.len[lines.len != 1]
+  head.pos = which(lines.len == 4)
+  head.id = rep(head.pos, c(head.pos[-1], length(lines.l)+1)-head.pos)
+  mat = matrix(as.numeric(unlist(lines.l[lines.len==7])), 7)
+  res = as.data.frame(t(mat[1:5,]))
+  colnames(res) = c('rs','re','qs','qe','error')
+  res$qid = unlist(lapply(lines.l[head.id[lines.len==7]], '[', 2))
+  res$rid = unlist(lapply(lines.l[head.id[lines.len==7]], '[', 1)) %>% gsub('^>', '', .)
+  res$strand = ifelse(res$qe-res$qs > 0, '+', '-')
+  res
+}
+
+#calculates percentage identity and mid point for each mummer alignment
+calculate_perc_id_mid_points <- function(data){
+  data$r_length <- (data$re - data$rs)
+  data$perc_id <- ((data$r_length - data$error)/data$r_length)*100
+  data$perc_id_factor <- data$perc_id
+  data[data$perc_id < 100, "perc_id_factor"] <- "<100"
+  data$perc_id_factor <- as.factor(data$perc_id_factor)
+  data$r_mid <- (data$rs + data$re)/2
+  data$q_mid <- (data$qs + data$qe)/2
+  return(data)
+}
+
+#reads in delta file, calculates percentage ID and filters for a minimum alignment size
+pre_plot_analysis <- function(delta_path, min_size = 20000){
+  data = readDelta(delta_path)
+  data <- calculate_perc_id_mid_points(data)
+  data_filt <- data[data$r_length >= min_size,]
+  return(data_filt)
+}
+
+# Plots diagonal scatter plot of a nucmer pairwise alignment with points coloured by percentage identity of alignment - x axis is reference, y axis is query
+plot_by_perc_id_cap <- function(data, xmin = 0, xmax = max(data$re), cap_lower, cap_upper){
+  #order data by % ID to help with overplotting
+  data <- data[order(data$perc_id),]
+  ggplot(data[data$rs > xmin & data$re < xmax,], aes(x=rs, xend=re, y=qs, yend=qe, colour=perc_id)) + geom_segment() +
+    geom_point(alpha=.5) +
+    theme_bw() + 
+    theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank()) +
+    xlab(unique(data$rid)) + ylab(unique(data$qid)) +
+    scale_colour_viridis(limits = c(cap_lower, cap_upper)) +
+    scale_x_continuous(breaks=seq(xmin,xmax,100000000)) +
+    scale_y_continuous(breaks=seq(0,max(data$qe),100000000))
+}
+
+plot_by_perc_id_cap_midpoint <- function(data, xmin = 0, xmax = max(data$re), cap_lower, cap_upper){
+  #order data by % ID to help with overplotting
+  data <- data[order(data$perc_id),]
+  ggplot(data[data$rs > xmin & data$re < xmax,], aes(x=r_mid, y=q_mid, colour=perc_id)) +
+    geom_point(size = 0.3) +
+    theme_bw() + 
+    theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank(),) +
+    #xlab(unique(data$rid)) + ylab(unique(data$qid)) +
+    scale_colour_viridis(limits = c(cap_lower, cap_upper)) +
+    scale_x_continuous(breaks=seq(xmin,xmax,100000000)) +
+    scale_y_continuous(breaks=seq(0,max(data$qe),100000000))+
+    coord_cartesian(xlim=c(xmin,xmax))
+}
+
+
+plot_perc_id_v_ref <- function(data, xmin = 0, xmax = max(data$re), ymin = 97, ymax = 100){
+  ggplot(data[data$r_mid > xmin & data$r_mid < xmax,], aes(x=r_mid, y=perc_id, colour=r_length)) +
+    theme_bw() + xlab(data$rid) + ylab(paste0('percentage ID v ', data$qid)) +
+    geom_point(alpha=.5) +
+    ylim(ymin, ymax) +
+    scale_colour_viridis()
+}
+
+plot_perc_id_v_ref_no_length <- function(data, xmin = 0, xmax = max(data$re), ymin = 97, ymax = 100, breaks = 0.5){
+  ggplot(data[data$r_mid > xmin & data$r_mid < xmax,], aes(x=r_mid, y=perc_id)) +
+    theme_bw() + 
+    #xlab(data$rid) + 
+   #ylab(paste0('percentage ID v ', data$qid)) +
+    theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank(),) +
+    geom_point(alpha=.5, size = 0.5, colour = "gray25") +
+    scale_x_continuous(breaks=seq(xmin,xmax,100000000)) +
+    scale_y_continuous(limits = c(ymin, ymax), breaks=seq(ymin,ymax,breaks)) +
+    coord_cartesian(xlim=c(xmin,xmax))
+}
+
+#bins alignment dataframe by reference position
+bin_data <- function(data, bin_size, max_chrom_size){
+  bins <- seq(0, max_chrom_size, by = bin_size)
+  data$bin <- NA
+  for (i in bins){
+    data$bin <- ifelse(((data$r_mid > (i-bin_size)) & (data$r_mid < (i-1))), i, data$bin)
+  }
+  return(data)
+}
+
+#plots median percentage identity of each bin against reference position, colour of point is based on if the median percentage identity passes the identity threshold
+plot_medians_line_colour_cut_off <- function(data, bin_size = 10000000, cut_off = 99.99, ymin = 97, ymax = 100, max_chrom_size){
+  comparison_filt_bin <- bin_data(data, bin_size = bin_size, max_chrom_size = max_chrom_size)
+  comparison_medians <- aggregate(perc_id ~ bin, data = comparison_filt_bin, FUN=median)
+  colnames(comparison_medians)[2] <- "perc_id_median"
+  comparison_medians$cut_off <- NA
+  comparison_medians$cut_off <- ifelse(comparison_medians$perc_id >= cut_off, paste0(">=",cut_off), paste0("<",cut_off))
+  comparison_medians$cut_off <- as.factor(comparison_medians$cut_off)
+  
+  ggplot(comparison_medians, aes(x=bin, y = perc_id_median, colour = cut_off)) +
+    geom_line(colour = "grey") + 
+    geom_point(size = 1)  + 
+    ylim(ymin,ymax) +
+    scale_colour_manual(values = c("#73D055FF", "#440154FF")) +
+    labs(colour = "% id") +
+    theme_bw() +
+    xlab(data$rid) +
+    
+    ggtitle(paste0(data$rid, " v ", data$qid, " BinSize: ", bin_size, " CutOff: ", cut_off))
+}
+
+#plots boxplots of percentage identity of each bin against reference position, colour of boxplot is based on if the median percentage identity passes the identity threshold
+plot_boxplots_median_colour_cut_off <- function(data, bin_size = 10000000, cut_off = 99.99, ymin = 97, ymax = 100, max_chrom_size){
+  comparison_filt_bin <- bin_data(data, bin_size = bin_size, max_chrom_size = max_chrom_size)
+  comparison_medians <- aggregate(perc_id ~ bin, data = comparison_filt_bin, FUN=median)
+  colnames(comparison_medians)[2] <- "perc_id_median"
+  comparison_medians$cut_off <- NA
+  comparison_medians$cut_off <- ifelse(comparison_medians$perc_id >= cut_off, paste0(">=",cut_off), paste0("<",cut_off))
+  comparison_medians$cut_off <- as.factor(comparison_medians$cut_off)
+  
+  comparison_to_plot <- merge(comparison_filt_bin, comparison_medians)
+  
+  ggplot(comparison_to_plot, aes(x=bin, y = perc_id, group = bin, fill = cut_off)) +
+    geom_boxplot(outlier.shape = NA, lwd = 0.3) +
+    scale_fill_manual(values = c("darkorchid4", "gold")) +
+    #labs(fill = "% id") +
+    #scale_colour_viridis() +
+    #xlab(data$rid) +
+    theme_bw() +
+    theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank(),) +
+    #ggtitle(paste0(data$rid, " v ", data$qid, " BinSize: ", bin_size, " CutOff: ", cut_off)) +
+    scale_x_continuous(breaks=seq(0,max(data$re),100000000)) +
+    scale_y_continuous(limits = c(ymin,ymax),breaks=seq(ymin,ymax,0.5))
+}
+
+
+## END OF FUNCTIONS
+
+```
+
+We want to zoom in on the junction in mace and stanley with the smaller window sizes
+
+Read in the raw data
+
+```{r}
+
+base_dir <- "X:/brintonj/haplotype/whole_genome_mummer/"
+
+min_size <- 20000
+cut_off <- 99.99
+
+chr <- "6A"
+chrom <- paste0("chr", chr)
+
+variety <- "mace"
+
+data_dir_6A <- "X:/brintonj/6A_region/mummer/whole_6A_aln/"
+data_dir <- paste0(data_dir_6A, variety, "/")
+
+all_files <- list.files(data_dir)
+
+filtered_delta <- all_files[grep("_L20Kb_rq.delta", all_files)]
+
+comparison <- "mace_v_stanley.all_6A_filtered_L20Kb_rq.delta"
+
+comparison_delta_path <- paste0(data_dir, "/", comparison)
+comparison_id <- str_split_fixed(comparison, "\\.", 3)[1]
+
+ref <- variety
+
+if (ref == "sy_mattis"){
+  query <- str_split_fixed(comparison_id, "_", 4)[4]
+} else {
+  query <- str_split_fixed(comparison_id, "_", 3)[3]
+}
+
+#read and filter for the minimum size
+comparison_filt <- pre_plot_analysis(delta_path = comparison_delta_path, min_size = min_size)
+print("data read in and filtered")
+head(comparison_filt)
+min(comparison_filt$perc_id)
+
+x_max <- 610000000
+```
+
+Also read in the mummer blocks
+
+```{r}
+#read in the mummer_block coordinates
+mummer <- read.table("X:/brintonj/haplotype/blocks_updated_coords/converted_10g/corrected/whole_genome_mummer_BLAST_5000000_blocks_combined_updated_ref_coords_10g_corrected.tsv",
+                     header = TRUE, 
+                     stringsAsFactors = FALSE)
+
+blocks_to_use <- mummer[(mummer$ref == "mace") & (mummer$query == "stanley") & (mummer$chrom == "chr6A") & (mummer$source == "mummer"),]
+
+blocks_to_use
+```
+
+We are interested in the 1.85e+08	2.80e+08 block, the left hand junction at 1.85e+08
+
+One level at a time...step down to the 2.5mbp blocks
+
+```{r}
+#read in the mummer_block coordinates
+
+mummer_25mbp <- read.table("X:/brintonj/haplotype/blocks_updated_coords/converted_10g/corrected/no_spelta_2gap/whole_genome_mummer_BLAST_2500000_blocks_combined_updated_ref_coords_10g_corrected_2gap_no_spelta.tsv",
+                     header = TRUE, 
+                     stringsAsFactors = FALSE)
+
+blocks_to_use_25m <- mummer_25mbp[(mummer_25mbp$ref == "mace") & (mummer_25mbp$query == "stanley") & (mummer_25mbp$chrom == "chr6A") & (mummer_25mbp$source == "mummer"),]
+
+blocks_to_use_25m
+
+head(mummer_25mbp)
+
+```
+
+The 1.85e+08	2.80e+08	block is still there - lets try zooming into .150-2.50
+
+5Mbp bins first
+```{r}
+
+width = 4
+height = 3
+
+data = comparison_filt
+bin_size = 5000000
+max_chrom_size = max(comparison_filt$re)
+alpha = 0.5
+fill = "#de87cd"
+cut_off = 99.99
+ymin = 99.9
+ymax = 100
+xmin = 150000000
+xmax = 250000000
+
+comparison_filt_bin <- bin_data(data, bin_size = bin_size, max_chrom_size = max_chrom_size)
+comparison_medians <- aggregate(perc_id ~ bin, data = comparison_filt_bin, FUN=median)
+colnames(comparison_medians)[2] <- "perc_id_median"
+comparison_medians$cut_off <- NA
+comparison_medians$cut_off <- ifelse(comparison_medians$perc_id >= cut_off, paste0(">=",cut_off), paste0("<",cut_off))
+comparison_medians$cut_off <- as.factor(comparison_medians$cut_off)
+  
+comparison_to_plot <- merge(comparison_filt_bin, comparison_medians)
+  
+perc_boxplot_5M_shade_zoom <- ggplot(comparison_to_plot, aes(x=bin, y = perc_id, group = bin, fill = cut_off)) +
+  annotate("rect", xmin = blocks_to_use$ref_start-(bin_size*0.5), xmax = blocks_to_use$ref_end+(bin_size*0.5), ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill) +
+    geom_boxplot(outlier.shape = NA, lwd = 0.3) +
+    scale_fill_manual(values = c("white", "gray50")) +
+    #labs(fill = "% id") +
+    #scale_colour_viridis() +
+    #xlab(data$rid) +
+    theme_bw() +
+    theme(strip.text.y=element_text(angle=180, size=5),
+          axis.text.x = element_text(angle = 90),
+          legend.position = "none")+#,
+          #strip.background=element_blank(),
+          #legend.position = "none",
+          #axis.title.x=element_blank(),
+          #axis.text.x=element_blank(),
+          #axis.title.y=element_blank(),
+          #axis.text.y=element_blank(),) +
+    #ggtitle(paste0(data$rid, " v ", data$qid, " BinSize: ", bin_size, " CutOff: ", cut_off)) +
+    scale_x_continuous(breaks=seq(xmin, xmax, 10000000)) +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,0.01)) +
+    coord_cartesian(ylim=c(ymin,ymax), xlim = c(xmin, xmax))
+
+perc_boxplot_5M_shade_zoom
+
+pdf(paste0("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/transition_zone_Ex1_", bin_size, ".pdf"), width = width, height = height)
+print(perc_boxplot_5M_shade_zoom)
+dev.off()
+```
+
+```{r}
+
+
+data = comparison_filt
+bin_size = 2500000
+max_chrom_size = max(comparison_filt$re)
+alpha = 0.5
+fill = "#de87cd"
+cut_off = 99.99
+ymin = 99.9
+ymax = 100
+xmin = 150000000
+xmax = 250000000
+
+comparison_filt_bin <- bin_data(data, bin_size = bin_size, max_chrom_size = max_chrom_size)
+comparison_medians <- aggregate(perc_id ~ bin, data = comparison_filt_bin, FUN=median)
+colnames(comparison_medians)[2] <- "perc_id_median"
+comparison_medians$cut_off <- NA
+comparison_medians$cut_off <- ifelse(comparison_medians$perc_id >= cut_off, paste0(">=",cut_off), paste0("<",cut_off))
+comparison_medians$cut_off <- as.factor(comparison_medians$cut_off)
+  
+comparison_to_plot <- merge(comparison_filt_bin, comparison_medians)
+  
+perc_boxplot_5M_shade_zoom_25mbp <- ggplot(comparison_to_plot, aes(x=bin, y = perc_id, group = bin, fill = cut_off)) +
+  annotate("rect", xmin = blocks_to_use_25m$ref_start-(bin_size*0.5), xmax = blocks_to_use_25m$ref_end+(bin_size*0.5), ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill) +
+    geom_boxplot(outlier.shape = NA, lwd = 0.3) +
+    scale_fill_manual(values = c("white", "gray50")) +
+    #labs(fill = "% id") +
+    #scale_colour_viridis() +
+    #xlab(data$rid) +
+    theme_bw() +
+    theme(strip.text.y=element_text(angle=180, size=5),
+          axis.text.x = element_text(angle = 90),
+          legend.position = "none")+#,
+          #strip.background=element_blank(),
+          #legend.position = "none",
+          #axis.title.x=element_blank(),
+          #axis.text.x=element_blank(),
+          #axis.title.y=element_blank(),
+          #axis.text.y=element_blank(),) +
+    #ggtitle(paste0(data$rid, " v ", data$qid, " BinSize: ", bin_size, " CutOff: ", cut_off)) +
+    scale_x_continuous(breaks=seq(xmin, xmax, 10000000)) +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,0.01)) +
+    coord_cartesian(ylim=c(ymin,ymax), xlim = c(xmin, xmax))
+
+perc_boxplot_5M_shade_zoom_25mbp
+
+pdf(paste0("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/transition_zone_Ex1_", bin_size, ".pdf"), width = width, height = height)
+print(perc_boxplot_5M_shade_zoom_25mbp)
+dev.off()
+```
+
+
+
+1mbp now
+
+
+
+```{r}
+#read in the mummer_block coordinates
+mummer_1mbp <- read.table("X:/brintonj/haplotype/blocks_updated_coords/converted_10g/corrected/no_spelta_2gap/whole_genome_mummer_BLAST_1e+06_blocks_combined_updated_ref_coords_10g_corrected_2gap_no_spelta.tsv",
+                     header = TRUE, 
+                     stringsAsFactors = FALSE)
+
+blocks_to_use_1m <- mummer_1mbp[(mummer_1mbp$ref == "mace") & (mummer_1mbp$query == "stanley") & (mummer_1mbp$chrom == "chr6A") & (mummer_1mbp$source == "mummer"),]
+
+blocks_to_use_1m
+
+
+
+```
+
+zooming into .150-2.50
+
+```{r}
+
+data = comparison_filt
+bin_size = 1000000
+max_chrom_size = max(comparison_filt$re)
+alpha = 0.5
+fill = "#de87cd"
+cut_off = 99.99
+ymin = 99.9
+ymax = 100
+xmin = 165000000
+xmax = 215000000
+
+comparison_filt_bin <- bin_data(data, bin_size = bin_size, max_chrom_size = max_chrom_size)
+comparison_medians <- aggregate(perc_id ~ bin, data = comparison_filt_bin, FUN=median)
+colnames(comparison_medians)[2] <- "perc_id_median"
+comparison_medians$cut_off <- NA
+comparison_medians$cut_off <- ifelse(comparison_medians$perc_id >= cut_off, paste0(">=",cut_off), paste0("<",cut_off))
+comparison_medians$cut_off <- as.factor(comparison_medians$cut_off)
+  
+comparison_to_plot <- merge(comparison_filt_bin, comparison_medians)
+  
+perc_boxplot_5M_shade_zoom_1mbp <- ggplot(comparison_to_plot, aes(x=bin, y = perc_id, group = bin, fill = cut_off)) +
+  annotate("rect", xmin = blocks_to_use_1m$ref_start-(bin_size*0.5), xmax = blocks_to_use_1m$ref_end+(bin_size*0.5), ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill) +
+    geom_boxplot(outlier.shape = NA, lwd = 0.3) +
+    scale_fill_manual(values = c("white", "gray50")) +
+    #labs(fill = "% id") +
+    #scale_colour_viridis() +
+    #xlab(data$rid) +
+    theme_bw() +
+    theme(strip.text.y=element_text(angle=180, size=5),
+          axis.text.x = element_text(angle = 90),
+          legend.position = "none")+#,
+          #strip.background=element_blank(),
+          #legend.position = "none",
+          #axis.title.x=element_blank(),
+          #axis.text.x=element_blank(),
+          #axis.title.y=element_blank(),
+          #axis.text.y=element_blank(),) +
+    #ggtitle(paste0(data$rid, " v ", data$qid, " BinSize: ", bin_size, " CutOff: ", cut_off)) +
+    scale_x_continuous(breaks=seq(xmin, xmax, 5000000)) +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,0.01)) +
+    coord_cartesian(ylim=c(ymin,ymax), xlim = c(xmin, xmax))
+
+perc_boxplot_5M_shade_zoom_1mbp
+
+pdf(paste0("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/transition_zone_Ex1_", bin_size, ".pdf"), width = width, height = height)
+print(perc_boxplot_5M_shade_zoom_1mbp)
+dev.off()
+```
+
+
+
+Try plotting the alignments in this border region with some indication of percentage ID
+```{r}
+data = comparison_filt
+bin_size = 250000
+max_chrom_size = max(comparison_filt$re)
+alpha = 0.5
+fill = "#de87cd"
+cut_off = 99.99
+ymin = 99.9
+ymax = 100
+xmin = 186000000
+xmax = 188000000
+
+aln_plot <- ggplot(data[data$rs > xmin & data$re < xmax,], aes(x=rs, xend=re, y=perc_id, yend=perc_id)) +
+  annotate("rect", xmin = blocks_to_use_1m$ref_start-(bin_size*0.5), xmax = blocks_to_use_1m$ref_end+(bin_size*0.5), ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill) +
+  geom_segment() +
+    #geom_point(alpha=.5) +
+    theme_bw() + 
+    scale_x_continuous(breaks=seq(xmin, xmax, 100000)) +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,0.01)) +
+  coord_cartesian(ylim=c(ymin,ymax), xlim = c(xmin, xmax)) +
+  theme(axis.text.x = element_text(angle = 90))
+
+aln_plot
+
+pdf(paste0("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/transition_zone_Ex1_alignments.pdf"), width = width, height = height)
+print(aln_plot)
+dev.off()
+
+```
+

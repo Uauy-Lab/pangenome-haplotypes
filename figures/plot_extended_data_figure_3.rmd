@@ -1,0 +1,73 @@
+---
+title: "Plot precision recall graphs"
+author: "Jemima Brinton"
+date: "17/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(RColorBrewer)
+```
+
+```{r}
+base_dir <- "C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/precision_recall/"
+plot_dir <- paste0(base_dir, "plots/")
+
+combined_data <- read.table(file = paste0(plot_dir, "combined_precision_recall_f1_table.tsv"),
+            sep = "\t",
+            header = TRUE,
+            stringsAsFactors =FALSE)
+combined_data$gene_block <- factor(combined_data$gene_block)
+combined_data$window_size <- factor(combined_data$window_size, levels = c("cdsbp", "0bp", "1000bp", "2000bp", "5000bp"))
+
+precision <- ggplot(combined_data, aes(x = window_size, y = precision, fill = gene_block)) +
+    geom_boxplot(outlier.size = 0.7) +
+    scale_fill_brewer(palette = "Set1") +
+    theme_bw() +
+    xlab("Flanking Sequence") +
+    ylab("Precision")
+
+precision
+```
+```{r}
+recall <- ggplot(combined_data, aes(x = window_size, y = recall, fill = gene_block)) +
+    geom_boxplot(outlier.size = 0.7) +
+    scale_fill_brewer(palette = "Set1") +
+    theme_bw() +
+    xlab("Flanking Sequence") +
+    ylab("Recall")
+
+recall
+```
+
+```{r}
+f1 <- ggplot(combined_data, aes(x = window_size, y = f1_score, fill = gene_block)) +
+    geom_boxplot(outlier.size = 0.7) +
+    scale_fill_brewer(palette = "Set1") +
+    theme_bw() +
+    xlab("Flanking Sequence") +
+    ylab("F1 score")
+
+f1
+```
+
+```{r}
+height = 4
+width = 5.5
+pdf("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/precision_combined.pdf", height = height, width = width)
+precision
+dev.off()
+
+pdf("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/recall_combined.pdf", height = height, width = width)
+recall
+dev.off()
+
+pdf("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/f1_combined.pdf", height = height, width = width)
+f1
+dev.off()
+
+
+```

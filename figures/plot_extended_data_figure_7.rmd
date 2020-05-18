@@ -1,0 +1,185 @@
+---
+title: "Plot 6A recombinants"
+author: "Jemima Brinton"
+date: "15/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(stringr)
+library(ggplot2)
+library("ggdendro")
+library(plyr)
+library(reshape2)
+library("grid")
+library(agricolae)
+library("gdata")
+library(RColorBrewer)
+
+convert_long_01 <- function(data){
+  converted <- data.frame(marker=character(), variable = character(),  value = numeric(),pos = numeric())
+  markers <- unique(data$marker)
+
+  for (i in seq(1, length(markers))){
+    marker <- markers[i]
+    marker_data <- data[data$marker == marker,]
+    snp_calls <- unique(marker_data$value)
+    alleles <- snp_calls[(snp_calls %in% c("A", "C", "T", "G"))]
+    if (length(alleles) > 1){
+    marker_data$value <- gsub(alleles[1], "0", marker_data$value)
+    marker_data$value <- gsub(alleles[2], "1", marker_data$value)
+    } else if (length(alleles) == 1) {
+    marker_data$value <- gsub(alleles[1], "0", marker_data$value)
+    print(marker)
+      print(alleles)
+    } else if (length(alleles) == 0 | length(alleles) >2) {
+      print(marker)
+      print(alleles)
+    }
+    converted <- rbind(converted, marker_data)
+  }
+  #converted$value <- gsub("N", "NA", converted$value)
+  converted$value <- as.numeric(converted$value)
+  return(converted)
+}
+
+plot_capture_clust <- function(data, start, end, outfile_prefix){
+   data_zoom <- data[(data$pos > start) & (data$pos < end),]
+  #print(table(data_zoom$aln_type))
+  zoom_mat <- dcast(data_zoom[,c("variable", "pos", "value")], variable ~ pos)
+  zoom.matrix <- as.matrix(zoom_mat[,c(2:(ncol(zoom_mat)-1))])
+  dim(zoom.matrix)
+  rownames(zoom.matrix) <- zoom_mat$variable
+  zoom.dendro <- as.dendrogram(hclust(d=dist(x = zoom.matrix)))
+  #dendro.plot <- ggdendrogram(data = zoom.dendro, rotate = TRUE)
+  #ggsave(plot = dendro.plot, file = paste0(outfile_prefix, "_dendrogram.png"), dpi = 600, height = 18, width = 8)
+  zoom.order <- order.dendrogram(zoom.dendro)
+  data_zoom$variable <- factor(x = data_zoom$variable, levels = zoom_mat$variable[zoom.order], ordered = TRUE)
+  plot <- ggplot(data_zoom , aes(x=factor(pos),y=variable)) +
+		geom_tile(aes(fill = data_zoom$value)) +
+		#scale_fill_distiller(limits=c(0,1), type='div', palette="YlGnBu", na.value = "gray94", direction = 1, name = "allele") +
+    #scale_fill_continuous(type = "viridis") +
+    scale_fill_gradient(low = "#440154FF", high = "#1F968BFF", na.value = "grey50", aesthetics = "fill") +
+		theme(axis.text.x=element_text(angle=90, hjust=1)) #+
+    #geom_point( aes( x = "TraesCS6A02G189400.1", y=aln_type, colour = "red" ) )
+  #ggsave(plot = plot, file = paste0(outfile_prefix, "_heatmap.png"), dpi = 600, height = 8, width = 18)
+  return(plot)
+}
+
+plot_capture_clust_AGCT <- function(data, start, end, outfile_prefix){
+   data_zoom <- data[(data$pos > start) & (data$pos < end),]
+  #print(table(data_zoom$aln_type))
+  zoom_mat <- dcast(data_zoom[,c("variable", "pos", "value")], variable ~ pos)
+  zoom.matrix <- as.matrix(zoom_mat[,c(2:(ncol(zoom_mat)-1))])
+  dim(zoom.matrix)
+  rownames(zoom.matrix) <- zoom_mat$variable
+  zoom.dendro <- as.dendrogram(hclust(d=dist(x = zoom.matrix)))
+  #dendro.plot <- ggdendrogram(data = zoom.dendro, rotate = TRUE)
+  #ggsave(plot = dendro.plot, file = paste0(outfile_prefix, "_dendrogram.png"), dpi = 600, height = 18, width = 8)
+  zoom.order <- order.dendrogram(zoom.dendro)
+  data_zoom$variable <- factor(x = data_zoom$variable, levels = zoom_mat$variable[zoom.order], ordered = TRUE)
+  plot <- ggplot(data_zoom , aes(x=factor(pos),y=variable)) +
+		geom_tile(aes(fill = data_zoom$value)) +
+		#scale_fill_distiller(limits=c(0,1), type='div', palette="YlGnBu", na.value = "gray94", direction = 1, name = "allele") +
+    #scale_fill_continuous(type = "viridis") +
+    #scale_fill_gradient(low = "#440154FF", high = "#1F968BFF", na.value = "grey50", aesthetics = "fill") +
+		theme(axis.text.x=element_text(angle=90, hjust=1)) #+
+    #geom_point( aes( x = "TraesCS6A02G189400.1", y=aln_type, colour = "red" ) )
+  #ggsave(plot = plot, file = paste0(outfile_prefix, "_heatmap.png"), dpi = 600, height = 8, width = 18)
+  return(plot)
+}
+```
+
+```{r}
+summarised_data <- read.table("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/recombinants/anova_adjusted_means_5_year_summary_6A_recs.csv",
+                              sep = ",",
+                              header = TRUE, 
+                              stringsAsFactors = FALSE)
+
+head(summarised_data)
+
+means <- aggregate(grain_width ~ group + group_call, data = summarised_data, FUN = mean)
+
+head(means)
+
+means$sd <- aggregate(grain_width ~ group + group_call, data = summarised_data, FUN = sd)[,3]
+means$count <- aggregate(grain_width ~ group + group_call, data = summarised_data, FUN = length)[,3]
+
+means$sterr <- means$sd/(sqrt(means$count))
+
+groups <- rev(unique(summarised_data$group))
+means$group <- factor(means$group, levels = groups)
+```
+
+plot bar chart of values
+
+```{r}
+
+group_colours <- c("S" = "white", "SR" = "gray63", "R" = "gray15")
+means_plot <- ggplot(means, aes(x = grain_width, y = group, fill = group_call)) +
+  geom_bar(stat="identity", colour = "black", width = 0.6) + 
+  theme_bw() +
+  coord_cartesian(xlim = c(3.4, 3.8)) +
+  geom_errorbar(aes(xmin=grain_width-sterr, xmax=grain_width+sterr), width=.2,
+                 position=position_dodge(.9)) +
+  scale_fill_manual(values = group_colours)
+
+means_plot
+```
+```{r}
+pdf("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/recombinants/anova_adjusted_means_5_year_summary_6A.pdf", height = 6, width = 7)
+means_plot
+dev.off()
+
+```
+
+Also want to plots the 35K markers across this regions for the bottom panel of the figure
+
+```{r}
+markers_6A <- read.table("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/H3_35K_markers_whole6A.csv",
+                         sep = ",",
+                         header = TRUE,
+                         stringsAsFactors = FALSE)
+
+haplotype_alloc <- read.table("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/UKRL_H3_plotting_order.csv",
+                         sep = ",",
+                         header = TRUE,
+                         stringsAsFactors = FALSE)
+
+H3_vars <- haplotype_alloc$line
+
+colnames(markers_6A)[1] <- "marker"
+
+markers_6A_long <- melt(markers_6A, id.vars = c("marker", "pos"))
+
+```
+
+```{r}
+markers_H3_AGCT <- markers_6A_long[markers_6A_long$variable %in% H3_vars,]
+base_colours <- c("A" = "#7570B3", "C" = "#E7298A", "G" = "#1B9E77", "T" = "#E6AB02")
+
+
+data = markers_H3_AGCT
+start = 23602422
+end = 581841760
+data_zoom <- data[(data$pos > start) & (data$pos < end),]
+data_zoom$variable <- factor(data_zoom$variable, levels = rev(H3_vars))
+
+
+plot <- ggplot(data_zoom , aes(x=factor(pos),y=variable)) +
+		geom_tile(aes(fill = value)) +
+		theme(axis.text.x=element_text(angle=90, hjust=1)) +
+    scale_fill_manual(values = base_colours) +
+  theme_bw()
+
+plot
+
+height= 4
+width = 10
+pdf("C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/H3_35K_6Aregion.pdf", height = height, width = width)
+plot
+dev.off()
+```
+

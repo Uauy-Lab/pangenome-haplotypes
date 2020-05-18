@@ -1,0 +1,622 @@
+---
+title: "Extended data Fig 4 plots"
+author: "Jemima Brinton"
+date: "12/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(stringr)
+
+
+bin_data_percent <- function(data, bin_size){
+  bins <- seq(0, 100, by = bin_size)
+  data$bin <- NA
+  for (i in bins){
+    data$bin <- ifelse(((data$percent_pos > (i-bin_size)) & (data$percent_pos <= (i))), i, data$bin)
+  }
+  return(data)
+}
+
+```
+
+
+General info for all plots
+
+```{r}
+data_dir <- "X:/brintonj/haplotype/summary_stats/block_stats_by_slice_500kbp/"
+output_dir <- "C:/Users/brintonj/Documents/2020_03_WFH/haplotype_manuscript/extended_data/"
+files <- list.files(data_dir, pattern = "tsv.gz")
+files
+
+region <- data.frame(matrix(NA, ncol = 3, nrow = 5))
+colnames(region) <- c("region", "start", "end")
+region$region <- c("R1", "R2a", "C", "R2b", "R3")
+region$start <-c(0, 9, 28, 50, 80)
+region$end <- c(9, 28, 50, 80, 100)
+
+alpha <- 0.7
+fill_R1R3 <- "#1f3a88"
+fill_R2 <- "#39b4c1"
+fill_C <- "#fffad2"
+
+region_colours <- c("R1" = "#1f3a88", "R2a" = "#39b4c1", "C" = "#fffad2", "R2b" = "#39b4c1", "R3" = "#1f3a88" )
+#Read in the chromosome lengths for chinese spring
+chrom_lengths <- read.table("W:/WGAv1.0/161010_Chinese_Spring_v1.0_pseudomolecules.fai",
+                            sep = "\t", 
+                            header = FALSE,
+                            stringsAsFactors = FALSE)
+
+head(chrom_lengths)
+colnames(chrom_lengths)[c(1,2)] <- c("chromosome", "chrom_length")
+  
+```
+
+First the 2.5 Mbp bins
+
+```{r}
+bin_size <- 2500
+
+file_path <- paste0(data_dir, "Block_slice500k_stats_Tae_", bin_size, "kbp.tsv.gz")
+  
+stats <- read.table(gzfile(file_path),
+                      sep = "\t", 
+                      header = TRUE, 
+                      stringsAsFactors = FALSE)
+
+percentile_stats <- merge(stats, chrom_lengths[,c("chromosome", "chrom_length")], all.x = TRUE, all.y = FALSE)
+
+percentile_stats$percent_pos <- (percentile_stats$slice/percentile_stats$chrom_length)*100
+
+binned_data <- bin_data_percent(percentile_stats, bin_size = 1)
+head(binned_data)
+
+```
+
+
+Plot block length plots
+```{r}
+#calculate and plot block length data
+binned_block_length_median_chrom <- aggregate(block_length ~ bin + chromosome, data = binned_data, FUN = median)
+#now consensus median
+binned_block_length_median <- aggregate(block_length ~ bin, data = binned_block_length_median_chrom, FUN = median)
+
+ymax <- ceiling(max(binned_block_length_median_chrom$block_length))
+
+  
+length_axes <- ggplot(binned_block_length_median_chrom, aes(x = bin, y = block_length, group = bin)) +
+    annotate("rect", xmin = region[region$region == "R1","start"], xmax = region[region$region == "R1","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R1R3) +
+    annotate("rect", xmin = region[region$region == "R2a","start"], xmax = region[region$region == "R2a","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R2) +
+    annotate("rect", xmin = region[region$region == "C","start"], xmax = region[region$region == "C","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_C) +
+    annotate("rect", xmin = region[region$region == "R2b","start"], xmax = region[region$region == "R2b","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R2) +
+    annotate("rect", xmin = region[region$region == "R3","start"], xmax = region[region$region == "R3","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R1R3) +
+    geom_boxplot(outlier.shape = NA, fill = "white") +
+    #ggtitle(paste0(bin_size, "kbp chrom_summarised")) +
+    theme_bw() +
+    scale_x_continuous(breaks=seq(0,100,10)) +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,50000000))
+#length_axes
+
+length <- length_axes +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+ #length                                   
+
+```
+
+```{r}
+  #now plot the number of genes
+  binned_genes_median_chrom <- aggregate(genes ~ bin + chromosome, data = binned_data, FUN = median)
+  binned_genes_median <- aggregate(genes ~ bin, data = binned_genes_median_chrom, FUN = median)
+ 
+
+ymax <- max(binned_genes_median_chrom$genes)
+
+  
+genes_axes <-  ggplot(binned_genes_median_chrom, aes(x = bin, y = genes, group = bin)) +
+    annotate("rect", xmin = region[region$region == "R1","start"], xmax = region[region$region == "R1","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R1R3) +
+    annotate("rect", xmin = region[region$region == "R2a","start"], xmax = region[region$region == "R2a","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R2) +
+    annotate("rect", xmin = region[region$region == "C","start"], xmax = region[region$region == "C","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_C) +
+    annotate("rect", xmin = region[region$region == "R2b","start"], xmax = region[region$region == "R2b","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R2) +
+    annotate("rect", xmin = region[region$region == "R3","start"], xmax = region[region$region == "R3","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R1R3) +
+    geom_boxplot(outlier.shape = NA, fill = "white") +
+    #ggtitle(paste0(bin_size, "kbp chrom_summarised")) +
+    theme_bw() +
+    #theme(strip.text.y=element_text(angle=180, size=5),
+          #strip.background=element_blank(),
+          #legend.position = "none",
+          #axis.title.x=element_blank(),
+          #axis.text.x=element_blank(),
+          #axis.title.y=element_blank(),
+          #axis.text.y=element_blank(),) +
+    scale_x_continuous(breaks=seq(0,100,10)) +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,500))
+
+
+genes <- genes_axes +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+genes                                     
+
+
+```
+
+PDFs
+```{r}
+width = 15
+height = 3
+
+pdf(paste0(output_dir, "extended_data_4_block_length_with_legend_bin", bin_size, ".pdf"), width = width, height = height)
+print(length_axes)
+dev.off()
+
+pdf(paste0(output_dir, "extended_data_4_block_length_bin", bin_size, ".pdf"), width = width, height = height)
+print(length)
+dev.off()
+
+pdf(paste0(output_dir, "extended_data_4_number_of_genes_with_legend_bin", bin_size, ".pdf"), width = width, height = height)
+print(genes_axes)
+dev.off()
+
+pdf(paste0(output_dir, "extended_data_4_number_of_genes_bin", bin_size, ".pdf"), width = width, height = height)
+print(genes)
+dev.off()
+```
+
+```{r}
+ymax = max(binned_block_length_median_chrom$block_length)
+head(binned_block_length_median_chrom)
+region
+
+binned_block_length_median_chrom$region <- NA
+for (i in seq(1, nrow(region))){
+  region_id <- region[i,"region"]
+  binned_block_length_median_chrom$region <- ifelse(((binned_block_length_median_chrom[, "bin"] > region[i,"start"]) & (binned_block_length_median_chrom[, "bin"] <= region[i,"end"])), region_id, binned_block_length_median_chrom$region)
+}
+
+binned_block_length_median_chrom$region <- factor(binned_block_length_median_chrom$region, levels = c("R1", "R2a", "C", "R2b", "R3"))
+
+summary_length_axes <-  ggplot(binned_block_length_median_chrom, aes(y = block_length, x = region, fill = region)) +
+    geom_boxplot(outlier.shape = NA, fill = region_colours) +
+    theme_bw() +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,50000000))
+
+print(summary_length_axes)
+
+summary_length <- summary_length_axes +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+print(summary_length)
+
+print(aggregate(block_length ~ region, data = binned_block_length_median_chrom, FUN = median))
+print(aggregate(block_length ~ region, data = binned_block_length_median_chrom, FUN = min))
+print(aggregate(block_length ~ region, data = binned_block_length_median_chrom, FUN = max))
+
+print(pairwise.wilcox.test(x = binned_block_length_median_chrom$block_length, g = binned_block_length_median_chrom$region, p.adjust.method = "BH"))
+
+#for the min and max, we really need the actual min and max (not the min and max of the summarised values)
+binned_data$region <- NA
+for (i in seq(1, nrow(region))){
+  region_id <- region[i,"region"]
+  binned_data$region <- ifelse(((binned_data[, "bin"] > region[i,"start"]) & (binned_data[, "bin"] <= region[i,"end"])), region_id, binned_data$region)
+}
+
+print(aggregate(block_length ~ region, data = binned_data, FUN = median))
+print(aggregate(block_length ~ region, data = binned_data, FUN = min))
+print(aggregate(block_length ~ region, data = binned_data, FUN = max))
+
+```
+
+Now the same but for number of genes
+
+```{r}
+ymax = max(binned_genes_median_chrom$genes)
+head(binned_genes_median_chrom)
+region
+
+binned_genes_median_chrom$region <- NA
+for (i in seq(1, nrow(region))){
+  region_id <- region[i,"region"]
+  binned_genes_median_chrom$region <- ifelse(((binned_genes_median_chrom[, "bin"] > region[i,"start"]) & (binned_genes_median_chrom[, "bin"] <= region[i,"end"])), region_id, binned_genes_median_chrom$region)
+}
+
+binned_genes_median_chrom$region <- factor(binned_genes_median_chrom$region, levels = c("R1", "R2a", "C", "R2b", "R3"))
+
+summary_genes_axes <-  ggplot(binned_genes_median_chrom, aes(y = genes, x = region, fill = region)) +
+    geom_boxplot(outlier.shape = NA, fill = region_colours) +
+    theme_bw() +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,500))
+
+print(summary_genes_axes)
+
+summary_genes <- summary_genes_axes +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+print(summary_genes)
+
+print(aggregate(genes ~ region, data = binned_genes_median_chrom, FUN = median))
+print(aggregate(genes ~ region, data = binned_genes_median_chrom, FUN = min))
+print(aggregate(genes ~ region, data = binned_genes_median_chrom, FUN = max))
+
+print(pairwise.wilcox.test(x = binned_genes_median_chrom$genes, g = binned_genes_median_chrom$region, p.adjust.method = "BH"))
+
+print(aggregate(genes ~ region, data = binned_data, FUN = median))
+print(aggregate(genes ~ region, data = binned_data, FUN = min))
+print(aggregate(genes ~ region, data = binned_data, FUN = max))
+
+```
+```{r}
+width = 4
+height = 3
+
+pdf(paste0(output_dir, "extended_data_4_block_length_with_legend_bin", bin_size, "summary.pdf"), width = width, height = height)
+print(summary_length_axes)
+dev.off()
+
+pdf(paste0(output_dir, "extended_data_4_block_length_bin", bin_size, "summary.pdf"), width = width, height = height)
+print(summary_length)
+dev.off()
+
+pdf(paste0(output_dir, "extended_data_4_number_of_genes_with_legend_bin", bin_size, "summary.pdf"), width = width, height = height)
+print(summary_genes_axes)
+dev.off()
+
+pdf(paste0(output_dir, "extended_data_4_number_of_genes_bin", bin_size, "summary.pdf"), width = width, height = height)
+print(summary_genes)
+dev.off()
+```
+
+Now 1Mbp bins
+
+```{r}
+bin_size <- 1000
+
+file_path <- paste0(data_dir, "Block_slice500k_stats_Tae_", bin_size, "kbp.tsv.gz")
+  
+stats <- read.table(gzfile(file_path),
+                      sep = "\t", 
+                      header = TRUE, 
+                      stringsAsFactors = FALSE)
+
+percentile_stats <- merge(stats, chrom_lengths[,c("chromosome", "chrom_length")], all.x = TRUE, all.y = FALSE)
+
+percentile_stats$percent_pos <- (percentile_stats$slice/percentile_stats$chrom_length)*100
+
+binned_data <- bin_data_percent(percentile_stats, bin_size = 1)
+head(binned_data)
+
+```
+
+
+Plot block length plots
+```{r}
+#calculate and plot block length data
+binned_block_length_median_chrom <- aggregate(block_length ~ bin + chromosome, data = binned_data, FUN = median)
+#now consensus median
+binned_block_length_median <- aggregate(block_length ~ bin, data = binned_block_length_median_chrom, FUN = median)
+
+ymax <- ceiling(max(binned_block_length_median_chrom$block_length))
+
+  
+length_axes <- ggplot(binned_block_length_median_chrom, aes(x = bin, y = block_length, group = bin)) +
+    annotate("rect", xmin = region[region$region == "R1","start"], xmax = region[region$region == "R1","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R1R3) +
+    annotate("rect", xmin = region[region$region == "R2a","start"], xmax = region[region$region == "R2a","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R2) +
+    annotate("rect", xmin = region[region$region == "C","start"], xmax = region[region$region == "C","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_C) +
+    annotate("rect", xmin = region[region$region == "R2b","start"], xmax = region[region$region == "R2b","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R2) +
+    annotate("rect", xmin = region[region$region == "R3","start"], xmax = region[region$region == "R3","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R1R3) +
+    geom_boxplot(outlier.shape = NA, fill = "white") +
+    #ggtitle(paste0(bin_size, "kbp chrom_summarised")) +
+    theme_bw() +
+    scale_x_continuous(breaks=seq(0,100,10)) +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,50000000))
+#length_axes
+
+length <- length_axes +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+ #length                                   
+
+```
+
+```{r}
+  #now plot the number of genes
+  binned_genes_median_chrom <- aggregate(genes ~ bin + chromosome, data = binned_data, FUN = median)
+  binned_genes_median <- aggregate(genes ~ bin, data = binned_genes_median_chrom, FUN = median)
+ 
+
+ymax <- max(binned_genes_median_chrom$genes)
+
+  
+genes_axes <-  ggplot(binned_genes_median_chrom, aes(x = bin, y = genes, group = bin)) +
+    annotate("rect", xmin = region[region$region == "R1","start"], xmax = region[region$region == "R1","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R1R3) +
+    annotate("rect", xmin = region[region$region == "R2a","start"], xmax = region[region$region == "R2a","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R2) +
+    annotate("rect", xmin = region[region$region == "C","start"], xmax = region[region$region == "C","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_C) +
+    annotate("rect", xmin = region[region$region == "R2b","start"], xmax = region[region$region == "R2b","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R2) +
+    annotate("rect", xmin = region[region$region == "R3","start"], xmax = region[region$region == "R3","end"], ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill_R1R3) +
+    geom_boxplot(outlier.shape = NA, fill = "white") +
+    #ggtitle(paste0(bin_size, "kbp chrom_summarised")) +
+    theme_bw() +
+    #theme(strip.text.y=element_text(angle=180, size=5),
+          #strip.background=element_blank(),
+          #legend.position = "none",
+          #axis.title.x=element_blank(),
+          #axis.text.x=element_blank(),
+          #axis.title.y=element_blank(),
+          #axis.text.y=element_blank(),) +
+    scale_x_continuous(breaks=seq(0,100,10)) +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,500))
+
+
+genes <- genes_axes +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+genes                                     
+
+
+```
+
+PDFs
+```{r}
+width = 15
+height = 3
+
+pdf(paste0(output_dir, "extended_data_4_block_length_with_legend_bin", bin_size, ".pdf"), width = width, height = height)
+print(length_axes)
+dev.off()
+
+pdf(paste0(output_dir, "extended_data_4_block_length_bin", bin_size, ".pdf"), width = width, height = height)
+print(length)
+dev.off()
+
+pdf(paste0(output_dir, "extended_data_4_number_of_genes_with_legend_bin", bin_size, ".pdf"), width = width, height = height)
+print(genes_axes)
+dev.off()
+
+pdf(paste0(output_dir, "extended_data_4_number_of_genes_bin", bin_size, ".pdf"), width = width, height = height)
+print(genes)
+dev.off()
+```
+Now we want the summary boxplots per region
+
+```{r}
+ymax = max(binned_block_length_median_chrom$block_length)
+head(binned_block_length_median_chrom)
+region
+
+binned_block_length_median_chrom$region <- NA
+for (i in seq(1, nrow(region))){
+  region_id <- region[i,"region"]
+  binned_block_length_median_chrom$region <- ifelse(((binned_block_length_median_chrom[, "bin"] > region[i,"start"]) & (binned_block_length_median_chrom[, "bin"] <= region[i,"end"])), region_id, binned_block_length_median_chrom$region)
+}
+
+binned_block_length_median_chrom$region <- factor(binned_block_length_median_chrom$region, levels = c("R1", "R2a", "C", "R2b", "R3"))
+
+summary_length_axes <-  ggplot(binned_block_length_median_chrom, aes(y = block_length, x = region, fill = region)) +
+    geom_boxplot(outlier.shape = NA, fill = region_colours) +
+    theme_bw() +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,50000000))
+
+print(summary_length_axes)
+
+summary_length <- summary_length_axes +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+print(summary_length)
+
+print(aggregate(block_length ~ region, data = binned_block_length_median_chrom, FUN = median))
+print(aggregate(block_length ~ region, data = binned_block_length_median_chrom, FUN = min))
+print(aggregate(block_length ~ region, data = binned_block_length_median_chrom, FUN = max))
+
+print(pairwise.wilcox.test(x = binned_block_length_median_chrom$block_length, g = binned_block_length_median_chrom$region, p.adjust.method = "BH"))
+
+#for the min and max, we really need the actual min and max (not the min and max of the summarised values)
+binned_data$region <- NA
+for (i in seq(1, nrow(region))){
+  region_id <- region[i,"region"]
+  binned_data$region <- ifelse(((binned_data[, "bin"] > region[i,"start"]) & (binned_data[, "bin"] <= region[i,"end"])), region_id, binned_data$region)
+}
+
+print(aggregate(block_length ~ region, data = binned_data, FUN = median))
+print(aggregate(block_length ~ region, data = binned_data, FUN = min))
+print(aggregate(block_length ~ region, data = binned_data, FUN = max))
+
+```
+
+Now the same but for number of genes
+
+```{r}
+ymax = max(binned_genes_median_chrom$genes)
+head(binned_genes_median_chrom)
+region
+
+binned_genes_median_chrom$region <- NA
+for (i in seq(1, nrow(region))){
+  region_id <- region[i,"region"]
+  binned_genes_median_chrom$region <- ifelse(((binned_genes_median_chrom[, "bin"] > region[i,"start"]) & (binned_genes_median_chrom[, "bin"] <= region[i,"end"])), region_id, binned_genes_median_chrom$region)
+}
+
+binned_genes_median_chrom$region <- factor(binned_genes_median_chrom$region, levels = c("R1", "R2a", "C", "R2b", "R3"))
+
+summary_genes_axes <-  ggplot(binned_genes_median_chrom, aes(y = genes, x = region, fill = region)) +
+    geom_boxplot(outlier.shape = NA, fill = region_colours) +
+    theme_bw() +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,500))
+
+print(summary_genes_axes)
+
+summary_genes <- summary_genes_axes +
+  theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+
+print(summary_genes)
+
+print(aggregate(genes ~ region, data = binned_genes_median_chrom, FUN = median))
+print(aggregate(block_length ~ region, data = binned_block_length_median_chrom, FUN = min))
+print(aggregate(block_length ~ region, data = binned_block_length_median_chrom, FUN = max))
+
+print(pairwise.wilcox.test(x = binned_genes_median_chrom$genes, g = binned_genes_median_chrom$region, p.adjust.method = "BH"))
+
+
+
+print(aggregate(genes ~ region, data = binned_data, FUN = median))
+print(aggregate(genes ~ region, data = binned_data, FUN = min))
+print(aggregate(genes ~ region, data = binned_data, FUN = max))
+
+```
+```{r}
+width = 4
+height = 3
+
+pdf(paste0(output_dir, "extended_data_4_block_length_with_legend_bin", bin_size, "summary.pdf"), width = width, height = height)
+print(summary_length_axes)
+dev.off()
+
+pdf(paste0(output_dir, "extended_data_4_block_length_bin", bin_size, "summary.pdf"), width = width, height = height)
+print(summary_length)
+dev.off()
+
+pdf(paste0(output_dir, "extended_data_4_number_of_genes_with_legend_bin", bin_size, "summary.pdf"), width = width, height = height)
+print(summary_genes_axes)
+dev.off()
+
+pdf(paste0(output_dir, "extended_data_4_number_of_genes_bin", bin_size, "summary.pdf"), width = width, height = height)
+print(summary_genes)
+dev.off()
+```
+
+Just want the numbers for the 5 Mbp bins
+
+```{r}
+bin_size <- 5000
+
+file_path <- paste0(data_dir, "Block_slice500k_stats_Tae_", bin_size, "kbp.tsv.gz")
+  
+stats <- read.table(gzfile(file_path),
+                      sep = "\t", 
+                      header = TRUE, 
+                      stringsAsFactors = FALSE)
+
+percentile_stats <- merge(stats, chrom_lengths[,c("chromosome", "chrom_length")], all.x = TRUE, all.y = FALSE)
+
+percentile_stats$percent_pos <- (percentile_stats$slice/percentile_stats$chrom_length)*100
+
+binned_data <- bin_data_percent(percentile_stats, bin_size = 1)
+head(binned_data)
+
+#calculate and plot block length data
+binned_block_length_median_chrom <- aggregate(block_length ~ bin + chromosome, data = binned_data, FUN = median)
+#now consensus median
+binned_block_length_median <- aggregate(block_length ~ bin, data = binned_block_length_median_chrom, FUN = median)
+
+  #now plot the number of genes
+  binned_genes_median_chrom <- aggregate(genes ~ bin + chromosome, data = binned_data, FUN = median)
+ 
+binned_block_length_median_chrom$region <- NA
+for (i in seq(1, nrow(region))){
+  region_id <- region[i,"region"]
+  binned_block_length_median_chrom$region <- ifelse(((binned_block_length_median_chrom[, "bin"] > region[i,"start"]) & (binned_block_length_median_chrom[, "bin"] <= region[i,"end"])), region_id, binned_block_length_median_chrom$region)
+}
+
+binned_block_length_median_chrom$region <- factor(binned_block_length_median_chrom$region, levels = c("R1", "R2a", "C", "R2b", "R3"))
+
+
+print(aggregate(block_length ~ region, data = binned_block_length_median_chrom, FUN = median))
+print(aggregate(block_length ~ region, data = binned_block_length_median_chrom, FUN = min))
+print(aggregate(block_length ~ region, data = binned_block_length_median_chrom, FUN = max))
+
+print(pairwise.wilcox.test(x = binned_block_length_median_chrom$block_length, g = binned_block_length_median_chrom$region, p.adjust.method = "BH"))
+
+#for the min and max, we really need the actual min and max (not the min and max of the summarised values)
+binned_data$region <- NA
+for (i in seq(1, nrow(region))){
+  region_id <- region[i,"region"]
+  binned_data$region <- ifelse(((binned_data[, "bin"] > region[i,"start"]) & (binned_data[, "bin"] <= region[i,"end"])), region_id, binned_data$region)
+}
+
+print(aggregate(block_length ~ region, data = binned_data, FUN = median))
+print(aggregate(block_length ~ region, data = binned_data, FUN = min))
+print(aggregate(block_length ~ region, data = binned_data, FUN = max))
+
+```
+
+Now the same but for number of genes
+
+```{r}
+
+head(binned_genes_median_chrom)
+region
+
+binned_genes_median_chrom$region <- NA
+for (i in seq(1, nrow(region))){
+  region_id <- region[i,"region"]
+  binned_genes_median_chrom$region <- ifelse(((binned_genes_median_chrom[, "bin"] > region[i,"start"]) & (binned_genes_median_chrom[, "bin"] <= region[i,"end"])), region_id, binned_genes_median_chrom$region)
+}
+
+binned_genes_median_chrom$region <- factor(binned_genes_median_chrom$region, levels = c("R1", "R2a", "C", "R2b", "R3"))
+
+print(aggregate(genes ~ region, data = binned_genes_median_chrom, FUN = median))
+print(aggregate(block_length ~ region, data = binned_block_length_median_chrom, FUN = min))
+print(aggregate(block_length ~ region, data = binned_block_length_median_chrom, FUN = max))
+
+median(binned_genes_median_chrom$genes)
+
+print(pairwise.wilcox.test(x = binned_genes_median_chrom$genes, g = binned_genes_median_chrom$region, p.adjust.method = "BH"))
+
+
+
+print(aggregate(genes ~ region, data = unique(binned_data, FUN = median))
+print(aggregate(genes ~ region, data = binned_data, FUN = min))
+print(aggregate(genes ~ region, data = binned_data, FUN = max))
+
+```
+
