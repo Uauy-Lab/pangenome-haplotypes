@@ -146,7 +146,7 @@ assign_blocks_mummer <-function(median_cutoffs){
 }
 
 #summarises adjacent bins into haplotype blocks
-summarise_blocks <- function(median_cutoffs_copy){
+summarise_blocks <- function(median_cutoffs_copy, bin_size){
   #now get the start and end of each block
   blocks <- unique(median_cutoffs_copy$block_no)
   blocks <- blocks[complete.cases(blocks)]
@@ -155,7 +155,7 @@ summarise_blocks <- function(median_cutoffs_copy){
   
   for(block in blocks){
     block_data <- subset(median_cutoffs_copy, block_no == block)
-    block_start <- min(block_data$bin) - 5000000
+    block_start <- min(block_data$bin) - bin_size
     block_end <- max(block_data$bin)
     ref <- unique(block_data$ref)
     query <- unique(block_data$query)
@@ -231,7 +231,7 @@ chromosomes_to_plot <- list.files(paste0(base_dir, "aln/", varieties_to_plot[1])
 #we will only use the 20kb filter here (this is already filtered using mummer)
 min_size <- 20000
 cut_off <- 99.99
-chromosomes_to_plot <- chromosomes_to_plot[!(chromosomes_to_plot == "1A")]
+bin_size <- 5000000
 
 for (i in seq(1, length(chromosomes_to_plot))){
   chrom <- paste0("chr", chromosomes_to_plot[i])
@@ -294,15 +294,15 @@ for (i in seq(1, length(chromosomes_to_plot))){
         ggsave(perc_dot_plot_97, file = paste0(plot_dir, comparison_id, ".", chrom, ".percentage_dot.min", min_size, "_cap97.png"), dpi = 300, height = 5, width = 9)
        
         #now plot the median cut offs
-        perc_line_5M <- plot_medians_line_colour_cut_off(comparison_filt, bin_size = 5000000, max_chrom_size = max_chrom_size)
+        perc_line_5M <- plot_medians_line_colour_cut_off(comparison_filt, bin_size = bin_size, max_chrom_size = max_chrom_size)
         ggsave(perc_line_5M, file = paste0(plot_dir, comparison_id, ".", chrom, ".percentage_line.min", min_size, "_5Mb_bin_99.99median.png"), dpi = 300, height = 5, width = 9)
         
-        perc_boxplot_5M <- plot_boxplots_median_colour_cut_off(comparison_filt, bin_size = 5000000, max_chrom_size = max_chrom_size)
+        perc_boxplot_5M <- plot_boxplots_median_colour_cut_off(comparison_filt, bin_size = bin_size, max_chrom_size = max_chrom_size)
         ggsave(perc_boxplot_5M, file = paste0(plot_dir, comparison_id, ".", chrom, ".percentage_boxplot.min", min_size, "_5Mb_bin_99.99median.png"), dpi = 300, height = 5, width = 9)
         
         #also output table with the medians of the bins
         
-        comparison_filt_bin <- bin_data(comparison_filt, bin_size = 5000000, max_chrom_size = max_chrom_size)
+        comparison_filt_bin <- bin_data(comparison_filt, bin_size = bin_size, max_chrom_size = max_chrom_size)
         comparison_medians <- aggregate(perc_id ~ bin, data = comparison_filt_bin, FUN=median)
         colnames(comparison_medians)[2] <- "perc_id_median"
         comparison_medians$cut_off <- NA
@@ -316,7 +316,7 @@ for (i in seq(1, length(chromosomes_to_plot))){
         
         #now assign the blocks
         ref_query_blocks <- assign_blocks_mummer(comparison_medians)
-        ref_query_coords <- summarise_blocks(ref_query_blocks)
+        ref_query_coords <- summarise_blocks(ref_query_blocks, bin_size = bin_size)
         if (nrow(ref_query_coords) > 0){
           ref_query_coords$chrom <- chrom
           ref_query_coords$ref_chrom <- unique(comparison_filt$rid)
@@ -330,7 +330,7 @@ for (i in seq(1, length(chromosomes_to_plot))){
   chrom_blocks_coords$in_reciprocal <- apply(chrom_blocks_coords, 1, check_reciprocal, all_ref_query_coords = chrom_blocks_coords)
   
   write.table(chrom_blocks_coords, 
-              file = paste0(blocks_chrom_dir, "/mummer_blocks_", chrom, ".min", min_size, ".5Mb_bins.txt"), 
+              file = paste0(blocks_chrom_dir, "/mummer_blocks_", chrom, ".min", min_size, ".", bin_size, "_bins.txt"), 
               sep = "\t",
               col.names = TRUE, 
               row.names = FALSE, 
