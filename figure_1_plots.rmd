@@ -1,0 +1,498 @@
+---
+title: "Plot figure 1 plots"
+author: "Jemima Brinton"
+date: "08/04/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+## generate plots for figure 1
+## using the mace/stanley 6A alignment example
+
+## FUNCTIONS
+library(dplyr)
+library(magrittr)
+library(GenomicRanges)
+library(ggplot2)
+library(tidyr)
+library(viridis)
+library(stringr)
+library(gridExtra)
+
+
+#Read Delta functions and plotting functions (adapted) used are from https://jmonlong.github.io/Hippocamplus/2017/09/19/mummerplots-with-ggplot2/
+#Reads in delta file output from nucmer into R and summarises into dataframe
+readDelta <- function(deltafile){
+  lines = scan(deltafile, 'a', sep='\n', quiet=TRUE)
+  lines = lines[-1]
+  lines.l = strsplit(lines, ' ')
+  lines.len = lapply(lines.l, length) %>% as.numeric
+  lines.l = lines.l[lines.len != 1]
+  lines.len = lines.len[lines.len != 1]
+  head.pos = which(lines.len == 4)
+  head.id = rep(head.pos, c(head.pos[-1], length(lines.l)+1)-head.pos)
+  mat = matrix(as.numeric(unlist(lines.l[lines.len==7])), 7)
+  res = as.data.frame(t(mat[1:5,]))
+  colnames(res) = c('rs','re','qs','qe','error')
+  res$qid = unlist(lapply(lines.l[head.id[lines.len==7]], '[', 2))
+  res$rid = unlist(lapply(lines.l[head.id[lines.len==7]], '[', 1)) %>% gsub('^>', '', .)
+  res$strand = ifelse(res$qe-res$qs > 0, '+', '-')
+  res
+}
+
+#calculates percentage identity and mid point for each mummer alignment
+calculate_perc_id_mid_points <- function(data){
+  data$r_length <- (data$re - data$rs)
+  data$perc_id <- ((data$r_length - data$error)/data$r_length)*100
+  data$perc_id_factor <- data$perc_id
+  data[data$perc_id < 100, "perc_id_factor"] <- "<100"
+  data$perc_id_factor <- as.factor(data$perc_id_factor)
+  data$r_mid <- (data$rs + data$re)/2
+  data$q_mid <- (data$qs + data$qe)/2
+  return(data)
+}
+
+#reads in delta file, calculates percentage ID and filters for a minimum alignment size
+pre_plot_analysis <- function(delta_path, min_size = 20000){
+  data = readDelta(delta_path)
+  data <- calculate_perc_id_mid_points(data)
+  data_filt <- data[data$r_length >= min_size,]
+  return(data_filt)
+}
+
+# Plots diagonal scatter plot of a nucmer pairwise alignment with points coloured by percentage identity of alignment - x axis is reference, y axis is query
+plot_by_perc_id_cap <- function(data, xmin = 0, xmax = max(data$re), cap_lower, cap_upper){
+  #order data by % ID to help with overplotting
+  data <- data[order(data$perc_id),]
+  ggplot(data[data$rs > xmin & data$re < xmax,], aes(x=rs, xend=re, y=qs, yend=qe, colour=perc_id)) + geom_segment() +
+    geom_point(alpha=.5) +
+    theme_bw() + 
+    theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank()) +
+    xlab(unique(data$rid)) + ylab(unique(data$qid)) +
+    scale_colour_viridis(limits = c(cap_lower, cap_upper)) +
+    scale_x_continuous(breaks=seq(xmin,xmax,100000000)) +
+    scale_y_continuous(breaks=seq(0,max(data$qe),100000000))
+}
+
+plot_by_perc_id_cap_midpoint <- function(data, xmin = 0, xmax = max(data$re), cap_lower, cap_upper){
+  #order data by % ID to help with overplotting
+  data <- data[order(data$perc_id),]
+  ggplot(data[data$rs > xmin & data$re < xmax,], aes(x=r_mid, y=q_mid, colour=perc_id)) +
+    geom_point(size = 0.3) +
+    theme_bw() + 
+    theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank(),) +
+    #xlab(unique(data$rid)) + ylab(unique(data$qid)) +
+    scale_colour_viridis(limits = c(cap_lower, cap_upper)) +
+    scale_x_continuous(breaks=seq(xmin,xmax,100000000)) +
+    scale_y_continuous(breaks=seq(0,max(data$qe),100000000))+
+    coord_cartesian(xlim=c(xmin,xmax))
+}
+
+
+plot_perc_id_v_ref <- function(data, xmin = 0, xmax = max(data$re), ymin = 97, ymax = 100){
+  ggplot(data[data$r_mid > xmin & data$r_mid < xmax,], aes(x=r_mid, y=perc_id, colour=r_length)) +
+    theme_bw() + xlab(data$rid) + ylab(paste0('percentage ID v ', data$qid)) +
+    geom_point(alpha=.5) +
+    ylim(ymin, ymax) +
+    scale_colour_viridis()
+}
+
+plot_perc_id_v_ref_no_length <- function(data, xmin = 0, xmax = max(data$re), ymin = 97, ymax = 100, breaks = 0.5){
+  ggplot(data[data$r_mid > xmin & data$r_mid < xmax,], aes(x=r_mid, y=perc_id)) +
+    theme_bw() + 
+    #xlab(data$rid) + 
+   #ylab(paste0('percentage ID v ', data$qid)) +
+    theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank(),) +
+    geom_point(alpha=.5, size = 0.5, colour = "gray25") +
+    scale_x_continuous(breaks=seq(xmin,xmax,100000000)) +
+    scale_y_continuous(limits = c(ymin, ymax), breaks=seq(ymin,ymax,breaks)) +
+    coord_cartesian(xlim=c(xmin,xmax))
+}
+
+#bins alignment dataframe by reference position
+bin_data <- function(data, bin_size, max_chrom_size){
+  bins <- seq(0, max_chrom_size, by = bin_size)
+  data$bin <- NA
+  for (i in bins){
+    data$bin <- ifelse(((data$r_mid > (i-bin_size)) & (data$r_mid < (i-1))), i, data$bin)
+  }
+  return(data)
+}
+
+#plots median percentage identity of each bin against reference position, colour of point is based on if the median percentage identity passes the identity threshold
+plot_medians_line_colour_cut_off <- function(data, bin_size = 10000000, cut_off = 99.99, ymin = 97, ymax = 100, max_chrom_size){
+  comparison_filt_bin <- bin_data(data, bin_size = bin_size, max_chrom_size = max_chrom_size)
+  comparison_medians <- aggregate(perc_id ~ bin, data = comparison_filt_bin, FUN=median)
+  colnames(comparison_medians)[2] <- "perc_id_median"
+  comparison_medians$cut_off <- NA
+  comparison_medians$cut_off <- ifelse(comparison_medians$perc_id >= cut_off, paste0(">=",cut_off), paste0("<",cut_off))
+  comparison_medians$cut_off <- as.factor(comparison_medians$cut_off)
+  
+  ggplot(comparison_medians, aes(x=bin, y = perc_id_median, colour = cut_off)) +
+    geom_line(colour = "grey") + 
+    geom_point(size = 1)  + 
+    ylim(ymin,ymax) +
+    scale_colour_manual(values = c("#73D055FF", "#440154FF")) +
+    labs(colour = "% id") +
+    theme_bw() +
+    xlab(data$rid) +
+    
+    ggtitle(paste0(data$rid, " v ", data$qid, " BinSize: ", bin_size, " CutOff: ", cut_off))
+}
+
+#plots boxplots of percentage identity of each bin against reference position, colour of boxplot is based on if the median percentage identity passes the identity threshold
+plot_boxplots_median_colour_cut_off <- function(data, bin_size = 10000000, cut_off = 99.99, ymin = 97, ymax = 100, max_chrom_size){
+  comparison_filt_bin <- bin_data(data, bin_size = bin_size, max_chrom_size = max_chrom_size)
+  comparison_medians <- aggregate(perc_id ~ bin, data = comparison_filt_bin, FUN=median)
+  colnames(comparison_medians)[2] <- "perc_id_median"
+  comparison_medians$cut_off <- NA
+  comparison_medians$cut_off <- ifelse(comparison_medians$perc_id >= cut_off, paste0(">=",cut_off), paste0("<",cut_off))
+  comparison_medians$cut_off <- as.factor(comparison_medians$cut_off)
+  
+  comparison_to_plot <- merge(comparison_filt_bin, comparison_medians)
+  
+  ggplot(comparison_to_plot, aes(x=bin, y = perc_id, group = bin, fill = cut_off)) +
+    geom_boxplot(outlier.shape = NA, lwd = 0.3) +
+    scale_fill_manual(values = c("darkorchid4", "gold")) +
+    #labs(fill = "% id") +
+    #scale_colour_viridis() +
+    #xlab(data$rid) +
+    theme_bw() +
+    theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank(),) +
+    #ggtitle(paste0(data$rid, " v ", data$qid, " BinSize: ", bin_size, " CutOff: ", cut_off)) +
+    scale_x_continuous(breaks=seq(0,max(data$re),100000000)) +
+    scale_y_continuous(limits = c(ymin,ymax),breaks=seq(ymin,ymax,0.5))
+}
+
+
+## END OF FUNCTIONS
+```
+
+```{r}
+
+base_dir <- "X:/brintonj/haplotype/whole_genome_mummer/"
+
+min_size <- 20000
+cut_off <- 99.99
+
+chr <- "6A"
+chrom <- paste0("chr", chr)
+
+variety <- "mace"
+
+data_dir_6A <- "X:/brintonj/6A_region/mummer/whole_6A_aln/"
+data_dir <- paste0(data_dir_6A, variety, "/")
+
+all_files <- list.files(data_dir)
+
+filtered_delta <- all_files[grep("_L20Kb_rq.delta", all_files)]
+
+comparison <- "mace_v_stanley.all_6A_filtered_L20Kb_rq.delta"
+
+comparison_delta_path <- paste0(data_dir, "/", comparison)
+comparison_id <- str_split_fixed(comparison, "\\.", 3)[1]
+
+ref <- variety
+
+if (ref == "sy_mattis"){
+  query <- str_split_fixed(comparison_id, "_", 4)[4]
+} else {
+  query <- str_split_fixed(comparison_id, "_", 3)[3]
+}
+
+#read and filter for the minimum size
+comparison_filt <- pre_plot_analysis(delta_path = comparison_delta_path, min_size = min_size)
+print("data read in and filtered")
+head(comparison_filt)
+min(comparison_filt$perc_id)
+
+x_max <- 610000000
+```
+
+
+
+```{r}
+diagonal_dot_plot_mid <- plot_by_perc_id_cap_midpoint(comparison_filt, cap_lower = 97, cap_upper = 100, xmax = x_max)
+diagonal_dot_plot_mid
+```
+
+```{r}
+diagonal_dot_plot_mid_legend <- plot_by_perc_id_cap(comparison_filt, cap_lower = 97, cap_upper = 100, xmax = x_max)
+diagonal_dot_plot_mid_legend
+
+```
+
+
+
+```{r}
+perc_dot_plot_no_length <- plot_perc_id_v_ref_no_length(comparison_filt, ymin = 97, xmax = x_max)
+        
+perc_dot_plot_no_length
+```
+```{r}
+perc_boxplot_5M <- plot_boxplots_median_colour_cut_off(comparison_filt, bin_size = 5000000, max_chrom_size = max(comparison_filt$re))
+perc_boxplot_5M
+```
+
+
+Add some shading in the background of the boxplots where haplotype blocks are called
+
+```{r}
+#read in the mummer_block coordinates
+mummer <- read.table("X:/brintonj/haplotype/blocks_updated_coords/converted_10g/corrected/whole_genome_mummer_BLAST_5000000_blocks_combined_updated_ref_coords_10g_corrected.tsv",
+                     header = TRUE, 
+                     stringsAsFactors = FALSE)
+
+blocks_to_use <- mummer[(mummer$ref == "mace") & (mummer$query == "stanley") & (mummer$chrom == "chr6A") & (mummer$source == "mummer"),]
+
+blocks_to_use
+```
+
+
+Focus just on the 99.9 - 100 % points
+
+Dot plot
+
+```{r}
+perc_dot_plot_no_length_zoom <- plot_perc_id_v_ref_no_length(comparison_filt, ymin = 99.9, breaks = 0.01, xmax = x_max)
+        
+perc_dot_plot_no_length_zoom
+```
+
+Boxplots
+```{r}
+
+data = comparison_filt
+bin_size = 5000000
+max_chrom_size = max(comparison_filt$re)
+alpha = 0.5
+fill = "#de87cd"
+cut_off = 99.99
+ymin = 99.9
+ymax = 100
+
+comparison_filt_bin <- bin_data(data, bin_size = bin_size, max_chrom_size = max_chrom_size)
+  comparison_medians <- aggregate(perc_id ~ bin, data = comparison_filt_bin, FUN=median)
+  colnames(comparison_medians)[2] <- "perc_id_median"
+  comparison_medians$cut_off <- NA
+  comparison_medians$cut_off <- ifelse(comparison_medians$perc_id >= cut_off, paste0(">=",cut_off), paste0("<",cut_off))
+  comparison_medians$cut_off <- as.factor(comparison_medians$cut_off)
+  
+  comparison_to_plot <- merge(comparison_filt_bin, comparison_medians)
+  
+perc_boxplot_5M_shade_zoom <- ggplot(comparison_to_plot, aes(x=bin, y = perc_id, group = bin, fill = cut_off)) +
+    #geom_rect(aes(xmin=blocks_to_use[1,"ref_start"]+bin_size,xmax=blocks_to_use[1,"ref_end"]+bin_size,ymin=-Inf,ymax=Inf),alpha=alpha,fill=fill) +
+  #geom_rect(aes(xmin=blocks_to_use[2,"ref_start"]+bin_size,xmax = blocks_to_use[2,"ref_end"]+bin_size,ymin=-Inf,ymax=Inf),alpha=alpha,fill=fill) +
+  #geom_rect(aes(xmin=blocks_to_use[3,"ref_start"]+bin_size,xmax = blocks_to_use[3,"ref_end"]+bin_size,ymin=-Inf,ymax=Inf),alpha=alpha,fill=fill) +
+  #geom_rect(aes(xmin=blocks_to_use[4,"ref_start"]+bin_size,xmax = blocks_to_use[4,"ref_end"]+bin_size,ymin=-Inf,ymax=Inf),alpha=alpha,fill=fill) +
+  #geom_rect(aes(xmin=blocks_to_use[5,"ref_start"]+bin_size,xmax = blocks_to_use[5,"ref_end"]+bin_size,ymin=-Inf,ymax=Inf),alpha=alpha,fill=fill) +
+  annotate("rect", xmin = blocks_to_use$ref_start+(bin_size*0.5), xmax = blocks_to_use$ref_end+(bin_size*0.5), ymin=-Inf,ymax=Inf, alpha = alpha, fill = fill) +
+    geom_boxplot(outlier.shape = NA, lwd = 0.3) +
+    scale_fill_manual(values = c("white", "gray50")) +
+    #labs(fill = "% id") +
+    #scale_colour_viridis() +
+    #xlab(data$rid) +
+    theme_bw() +
+    theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank(),) +
+    #ggtitle(paste0(data$rid, " v ", data$qid, " BinSize: ", bin_size, " CutOff: ", cut_off)) +
+    scale_x_continuous(breaks=seq(0,x_max,100000000)) +
+    scale_y_continuous(limits = c(0,ymax),breaks=seq(0,ymax,0.01)) +
+    coord_cartesian(ylim=c(ymin,ymax), xlim = c(0,x_max))
+
+perc_boxplot_5M_shade_zoom
+```
+```{r}
+#ggsave(combined, "Y:/Publications/Haplotypes/Figures/figure_1_mummer_plots.png", dpi = 600, height = 10, width = 10)
+png("Y:/Publications/Haplotypes/Figures/figure_1_mummer_plots_shade.png", res = 1500, width = 4.3, height = 3.8, units = "in")
+grid.arrange(diagonal_dot_plot_mid, perc_dot_plot_no_length, perc_boxplot_5M_shade, nrow=3)
+dev.off()
+
+png("Y:/Publications/Haplotypes/Figures/figure_1_mummer_plots_shade_wide.png", res = 1500, width = 6.5, height = 4, units = "in")
+grid.arrange(diagonal_dot_plot_mid, perc_dot_plot_no_length, perc_boxplot_5M_shade, nrow=3)
+dev.off()
+
+png("Y:/Publications/Haplotypes/Figures/figure_1_mummer_plots_shade_zoomed_wide.png", res = 1500, width = 6.5, height = (4/3)*4, units = "in")
+grid.arrange(diagonal_dot_plot_mid, perc_dot_plot_no_length, perc_dot_plot_no_length_zoom, perc_boxplot_5M_shade_zoom, nrow=4)
+dev.off()
+
+## also want to save them separately
+png("Y:/Publications/Haplotypes/Figures/figure_1_mummer_plots_wide_diagonal.png", res = 1500, width = 6.5, height = (4/3), units = "in")
+print(diagonal_dot_plot_mid)
+dev.off()
+
+png("Y:/Publications/Haplotypes/Figures/figure_1_mummer_plots_wide_perc_dot.png", res = 1500, width = 6.5, height = (4/3), units = "in")
+print(perc_dot_plot_no_length)
+dev.off()
+
+png("Y:/Publications/Haplotypes/Figures/figure_1_mummer_plots_wide_perc_dot_zoom.png", res = 1500, width = 6.5, height = (4/3), units = "in")
+print(perc_dot_plot_no_length_zoom)
+dev.off()
+
+png("Y:/Publications/Haplotypes/Figures/figure_1_mummer_plots_wide_boxplot_zoom.png", res = 1500, width = 6.5, height = (4/3), units = "in")
+print(perc_boxplot_5M_shade_zoom)
+dev.off()
+
+png("Y:/Publications/Haplotypes/Figures/figure_1_mummer_plots_wide_diagonal_with_legend.png", res = 1500, width = 6.5, height = 4, units = "in")
+print(diagonal_dot_plot_mid_legend)
+dev.off()
+
+png("Y:/Publications/Haplotypes/Figures/figure_1_mummer_plots_wide_diagonal_with_legend_alt.png", res = 1500, width = 6.5, height = 4, units = "in")
+print(diagonal_dot_plot_mid_legend)
+dev.off()
+
+png("Y:/Publications/Haplotypes/Figures/figure_1_mummer_plots_wide_diagonal_short.png", res = 1500, width = 6.5, height = 1, units = "in")
+print(diagonal_dot_plot_mid)
+dev.off()
+```
+
+Next we want to generate the heatmaps from the BLAST with the different amounts of flanking sequence
+
+```{r}
+blast_data_dir <- "W:/ramirezr/SM1/pairwise_blast_oct_2019/"
+files_to_run <- list.files(blast_data_dir, pattern = "varieties_6A_identites")
+
+bp0 <- read.table(gzfile(paste0(blast_data_dir, "varieties_6A_identites_0bp.tab.gz")), sep = "\t", header = TRUE, stringsAsFactors = FALSE)
+bp1000 <- read.table(gzfile(paste0(blast_data_dir, "varieties_6A_identites_1000bp.tab.gz")), sep = "\t", header = TRUE, stringsAsFactors = FALSE)
+bp2000 <- read.table(gzfile(paste0(blast_data_dir, "varieties_6A_identites_2000bp.tab.gz")), sep = "\t", header = TRUE, stringsAsFactors = FALSE)
+bp5000 <- read.table(gzfile(paste0(blast_data_dir, "varieties_6A_identites_5000bp.tab.gz")), sep = "\t", header = TRUE, stringsAsFactors = FALSE)
+cds <- read.table(gzfile(paste0(blast_data_dir, "varieties_6A_identites_cdsbp.tab.gz")), sep = "\t", header = TRUE, stringsAsFactors = FALSE)
+
+all_flank <- rbind(cds, bp5000, bp2000, bp1000, bp0)
+
+mace_stanley <- all_flank[all_flank$aln_type == "mace->stanley",]
+mace_stanley <- mace_stanley[order(mace_stanley$transcript),]
+#add the capped identity
+mace_stanley$capped_ident <- mace_stanley$pident
+mace_stanley[mace_stanley$capped_ident < 100, "capped_ident"] <- 0
+mace_stanley$Flanking <- factor(mace_stanley$Flanking, levels = c("5000", "2000", "1000", "0", "cds"))
+mace_stanley$capped_ident <- factor(as.character(mace_stanley$capped_ident), levels = c("0", "100"))
+mace_stanley$capped_ident_noN <- mace_stanley$capped_ident
+mace_stanley[mace_stanley$Ns_total > 0, "capped_ident_noN"] <- NA
+mace_stanley_expand <- data.frame(complete(mace_stanley, transcript, Flanking))
+
+
+mace_stanley_noN <- mace_stanley[mace_stanley$Ns_total == 0,]
+
+table(mace_stanley_noN$Flanking)
+mace_stanley_noN_expand <- data.frame(complete(mace_stanley_noN, transcript, Flanking))
+```
+
+Try plotting all together this will show which transcripts get removed with the Ns
+
+```{r}
+colours = c("0" = "gray", "100" = "black")
+na_col <- "white"
+combined_heatmap <- ggplot(mace_stanley_expand , aes(x=factor(transcript),y=Flanking)) +
+		geom_tile(aes(fill = capped_ident_noN)) +
+		scale_fill_manual(values = colours, na.value = na_col) +
+    theme_bw() + 
+    theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+          
+
+combined_heatmap 
+
+png("Y:/Publications/Haplotypes/Figures/figure_1_combined_heatmaps.png", res = 1500, width = 6.5, height = 2, units = "in")
+print(combined_heatmap)
+dev.off()
+
+combined_heatmap_axes <- ggplot(mace_stanley_expand , aes(x=factor(transcript),y=Flanking)) +
+		geom_tile(aes(fill = capped_ident_noN)) +
+		scale_fill_manual(values = colours, na.value = na_col) +
+    theme_bw() + 
+    theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          #legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank())
+          #axis.text.y=element_blank())
+          
+
+combined_heatmap_axes 
+
+png("Y:/Publications/Haplotypes/Figures/figure_1_combined_heatmaps_axes.png", res = 1500, width = 6.5, height = 2, units = "in")
+print(combined_heatmap_axes)
+dev.off()
+```
+
+Try plotting separately
+
+```{r}
+flanks <- unique(mace_stanley_expand$Flanking)
+
+for (flank in flanks){
+  flank_data <- mace_stanley_expand[mace_stanley_expand$Flanking == flank, ]
+  
+  flank_data_noN <- flank_data[flank_data$Ns_total == 0,]
+  flank_data_noN <- flank_data_noN[complete.cases(flank_data_noN$Ns_total),]
+  
+  heatmap_axes <- ggplot(flank_data_noN , aes(x=factor(transcript),y=Flanking)) +
+		geom_tile(aes(fill = capped_ident_noN)) +
+		scale_fill_manual(values = colours, na.value = na_col) +
+    theme_bw() + 
+    theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          #legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank())
+          #axis.text.y=element_blank())
+          
+
+png(paste0("Y:/Publications/Haplotypes/Figures/figure_1_", flank, "_heatmap_axes.png"), res = 1500, width = 6.5, height = 2, units = "in")
+print(heatmap_axes)
+dev.off()
+
+  heatmap <- ggplot(flank_data_noN , aes(x=factor(transcript),y=Flanking)) +
+		geom_tile(aes(fill = capped_ident_noN)) +
+		scale_fill_manual(values = colours, na.value = na_col) +
+    theme_bw() + 
+    theme(strip.text.y=element_text(angle=180, size=5),
+          strip.background=element_blank(),
+          legend.position = "none",
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank())
+          
+
+png(paste0("Y:/Publications/Haplotypes/Figures/figure_1_", flank, "_heatmap.png"), res = 1500, width = 6.5, height = 0.75, units = "in")
+print(heatmap)
+dev.off()
+}
+```
+
+
