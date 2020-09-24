@@ -260,7 +260,7 @@ Add some shading in the background of the boxplots where haplotype blocks are ca
 
 ```{r}
 #read in the mummer_block coordinates
-mummer <- read.table("X:/brintonj/haplotype/blocks_updated_coords/converted_10g/corrected/whole_genome_mummer_BLAST_5000000_blocks_combined_updated_ref_coords_10g_corrected.tsv",
+mummer <- read.table("X:/brintonj/haplotype/blocks_updated_coords/converted_10g/corrected/whole_genome_mummer_BLAST_5000000_blocks_combined_updated_ref_coords_10g_corrected_2gap_no_spelta.tsv",
                      header = TRUE, 
                      stringsAsFactors = FALSE)
 
